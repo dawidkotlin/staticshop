@@ -50,18 +50,17 @@ proc serve(client: AsyncSocket) {.async.} =
         result[key] = val
   const extToMime = toTable {".png": "image/png"}
   const sessionKeyCookie = "staticshopSessionKey"
-  block loop:
+  block mainLoop:
     while true:
       var sessionKey: string
       var vars = ReqVars(params: newStringTable(modeCaseInsensitive))
       var reqHeaders: Table[string, seq[string]]
       block outer:
-        let req = await client.recvLine() ## isClosed is lagging behind recvLine returning ""!
-        if req == "": break loop ## this is why I have to assume that req == "" means client is closed 
-        ## parse first row
+        let req = await client.recvLine() ## isClosed is lagging behind recvLine returning ""! *PROPABLY WRONG ABOUT THIS*
+        if req == "": break mainLoop ## this is why I have to assume that req == "" means client is closed *PROPABLY WRONG ABOUT THIS*
         var meth: HttpMethod
         var path: string
-        block:
+        block parseFirstRow:
           var i = 0
           meth =
             case (var s: string; i += req.parseUntil(s, Whitespace, i) + 1; s)
@@ -72,44 +71,47 @@ proc serve(client: AsyncSocket) {.async.} =
             inc i, req.parseUntil(path, it, i) + 2
           else:
             inc i, req.parseUntil(path, Whitespace, i) + 1
+          if meth == HttpGet:
+            let i = path.rfind('?')
+            if i >= 0: vars.params = parseQuery(path, i+1)
           if not req.substr(i).startsWith("HTTP/1.1"): vars.code = Http400; break
-        ## parse headers
-        while reqi < req.high: ## remember, "\r\n" is not included by `recvLine()`
-          var key: string
-          reqi += req.parseUntil(key, ':', reqi) + 2 # skip ": "
-          if key == "": vars.code = Http400; break outer
-          key = key.toLowerAscii()
+        block:
+          # parse headers
+          var i = 0
           while true:
-            var val: string
-            reqi += req.parseUntil(val, {',', '\n'}, reqi)
-            if val == "": vars.code = Http400; break outer
-            reqHeaders.mgetOrPut(key, @[]).add val
-            if reqi > req.high or req[reqi] == '\n': break
-            reqi += 1
-        if meth == HttpGet:
-          let i = path.rfind('?')
-          if i >= 0: vars.params = parseQuery(path, i+1)
-        elif meth == HttpPost:
-          ## parse body
-          if "content-length" notin reqHeaders: vars.code = Http411; break outer
-          let expectedLen = try: reqHeaders["content-length"][0].parseInt() except ValueError: (vars.code = Http411; break)
-          let body = if expectedLen > 0: await client.recv(expectedLen) else: "" 
-          if body.len != expectedLen: vars.code = Http411; break outer
-          if "content-type" notin reqHeaders: vars.code = Http400; break outer
-          if reqHeaders["content-type"][0] == "multipart/form": vars.code = Http404; break outer
-          vars.params = parseQuery(body, 0)
-          if "Cookie" in reqHeaders:
-            let cookies = reqHeaders["Cookie"][0].parseCookies()
-            ## get session data
-            if cookies != nil and sessionKeyCookie in cookies:
-              sessionKey = cookies[sessionKeyCookie]
-              let sessionRow = row[tuple[data, user: string]](sql"select rowid, data, user from sessions where key = ?", sessionKey)
-              vars.reqUserRowid = sessionRow.user
-              let user = row[tuple[firstName, lastName, email: string]](sql"select firstName, lastName, email from users where rowid = ?", vars.reqUserRowid)
-              vars.reqUserFirstName = user.firstName
-              vars.reqUserLastName = user.lastName
-              vars.reqUserEmail = user.email
-              vars.session = to[vars.session.typeof] sessionRow.data
+            let row = await client.recvLine()
+            if row == "\c\L": break
+            var key: string
+            i += req.parseUntil(key, ':', i) + 2 # skip ": "
+            if key == "": vars.code = Http400; break outer
+            key = key.toLowerAscii()
+            while true:
+              var val: string
+              i += req.parseUntil(val, ',', i) + 1
+              if val == "": vars.code = Http400; break outer
+              reqHeaders.mgetOrPut(key, @[]).add val
+              if i > req.high: break
+          if meth == HttpPost:
+            ## parse body
+            if "content-length" notin reqHeaders: vars.code = Http411; break outer
+            let expectedLen = try: reqHeaders["content-length"][0].parseInt() except ValueError: (vars.code = Http411; break)
+            let body = if expectedLen > 0: await client.recv(expectedLen) else: "" 
+            if body.len != expectedLen: vars.code = Http411; break outer
+            if "content-type" notin reqHeaders: vars.code = Http400; break outer
+            if reqHeaders["content-type"][0] == "multipart/form": vars.code = Http404; break outer
+            vars.params = parseQuery(body, 0)
+            ## try to get the database
+            if "Cookie" in reqHeaders:
+              let cookies = reqHeaders["Cookie"][0].parseCookies()
+              if cookies != nil and sessionKeyCookie in cookies:
+                sessionKey = cookies[sessionKeyCookie]
+                let sessionRow = row[tuple[data, user: string]](sql"select rowid, data, user from sessions where key = ?", sessionKey)
+                vars.reqUserRowid = sessionRow.user
+                let user = row[tuple[firstName, lastName, email: string]](sql"select firstName, lastName, email from users where rowid = ?", vars.reqUserRowid)
+                vars.reqUserFirstName = user.firstName
+                vars.reqUserLastName = user.lastName
+                vars.reqUserEmail = user.email
+                vars.session = to[vars.session.typeof] sessionRow.data
         vars.code = Http404
         ## find route
         block findRoute:
@@ -137,7 +139,7 @@ proc serve(client: AsyncSocket) {.async.} =
       assert vars.code != HttpCode(0)
       if sessionKey == "": sessionKey = $genOid()
       db.exec sql"replace into session(key, data) values (?, ?)", sessionKey, $$vars.session
-      if client.isClosed or "Connection" in reqHeaders and reqHeaders["Connection"][0].toLowerAscii() != "keep-alive": break loop
+      if client.isClosed or "Connection" in reqHeaders and reqHeaders["Connection"][0].toLowerAscii() != "keep-alive": break mainLoop
       let resp = &"HTTP/1.1 " & toUpperAscii($vars.code) & "\n" & vars.respHeaders & "\r\n" & vars.respBody
       echo "vars.code = ", vars.code
       await client.send resp
