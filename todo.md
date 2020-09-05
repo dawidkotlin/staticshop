@@ -1,0 +1,2 @@
+- returning the corrent http codes with a body instead of 303 redirects
+- cap max login try speed
