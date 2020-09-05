@@ -1,76 +1,26 @@
-import db_sqlite, strutils, times, os, options, random
-export sql
+import tiny_sqlite, strutils, times, os, options, random
 
 when not defined(release):
   removeFile "resources/data.db"
 
-let db* = db_sqlite.open(connection="resources/data.db", user="", password="", database="")
+let
+  db* = openDatabase("resources/data.db")
 
 when not defined(release):
-  db.exec sql"""
-    create table lang(
-      img varchar not null)"""
-  
-  db.exec sql"""
-    create table langName(
-      describing integer not null references lang(rowid),
-      described integer not null references lang(rowid),
-      name varchar not null)"""
-  
-  db.exec sql"""
-    create table user(
-      email varchar not null,
-      passHash varchar not null,
-      passSalt varchar not null)"""
-  
-  db.exec sql"""
-    create table session(
-      key varchar not null unique,
-      data varchar not null,
-      user integer references user(rowid))"""
-  
-  db.exec sql"""
-    create table category(
-      rowid integer primary key autoincrement)"""
-  
-  db.exec sql"""
-    create table product(
-      img varchar not null,
-      price integer not null,
-      premiere integer not null,
-      category integer not null references category(rowid))"""
-  
-  db.exec sql"""
-    create table categoryName(
-      category integer not null references category(rowid),
-      lang integer not null references lang(rowid),
-      name varchar not null)"""
-  
-  db.exec sql"""
-    create table productName(
-      product integer not null references product(rowid),
-      lang integer not null references lang(rowid),
-      name varchar not null)"""
-  
-  db.exec sql"""
-    create table productDesc(
-      product integer not null references product(rowid),
-      lang integer not null references lang(rowid),
-      desc varchar not null)"""
-  
-  db.exec sql"""
-    create table purchase(
-      user integer not null references user(rowid),
-      product integer not null references product(rowid))"""
+  const modelScript = readFile("src/model.sql")
+
+  db.execScript modelScript
 
   proc lang(img: string): int64 =
-    result = db.insertID(sql"insert into lang(img) values(?)", img)
+    db.exec "insert into lang(img) values(?)", img
+    result = db.lastInsertRowId()
 
   proc category: int64 =
-    result = db.insertID(sql"insert into category default values")
+    db.exec "insert into category default values"
+    result = db.lastInsertRowId()
 
   proc langName(describingLang, describedLang: int64, name: string) =
-    db.exec sql"insert into langName(describing, described, name) values (?, ?, ?)", describingLang, describedLang, name
+    db.exec "insert into langName(describing, described, name) values (?, ?, ?)", describingLang, describedLang, name
 
   let pl = lang"https://upload.wikimedia.org/wikipedia/commons/thumb/1/12/Flag_of_Poland.svg/105px-Flag_of_Poland.svg.png"
   let en = lang"https://upload.wikimedia.org/wikipedia/commons/thumb/a/ae/Flag_of_the_United_Kingdom.svg/105px-Flag_of_the_United_Kingdom.svg.png"
@@ -98,7 +48,7 @@ when not defined(release):
   langName es, es, "española"
 
   proc categoryName(lang, cat: int64, name: string) =
-    db.exec sql"insert into categoryName(lang, category, name) values (?, ?, ?)", lang, cat, name
+    db.exec "insert into categoryName(lang, category, name) values (?, ?, ?)", lang, cat, name
 
   let
     scifi = category()

@@ -5,4 +5,4 @@ license = "MIT"
 srcDir = "src"
 bin = @["frontend.js", "staticshop"]
 
-requires "nim 1.3.5", "bcrypt 0.2.1"
+requires "nim 1.3.5", "bcrypt 0.2.1", "tiny_sqlite 0.1.2"

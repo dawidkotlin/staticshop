@@ -89,10 +89,10 @@ template renderPage*(vars: ReqVars, dslBody) =
         section(class="section"):
           tdiv(class="container"):
             
-            if vars.session.notif != "":
-              tdiv(class="notification " & vars.session.notifKind):
+            if vars.notif != "":
+              tdiv(class="notification " & vars.notifKind):
                 button(class="delete")
-                vars.session.notif
+                vars.notif
             
             dslBody
 
@@ -148,8 +148,8 @@ addRoute HttpGet, "/search", proc(vars: var ReqVars) =
     tdiv(class="columns"):
       tdiv(class="column is-one-quarter"):
         h1(class="title"): "Search"
+        
         form(action="/search"):
-          
           tdiv(class="field"):
             label(class="label"): "Name"
             tdiv(class="control"): input(class="input", `type`="text", name="name", value=searchedName)
@@ -212,24 +212,28 @@ addRoute HttpGet, "/search", proc(vars: var ReqVars) =
 addRoute HttpPost, "/signup", proc(vars: var ReqVars) =
   let email = vars.param("email")
   
-  if db.getValue(sql"select exists(select 1 from user where email = ?)", email) != "1":
-    vars.session.notif = "Email already taken"
-    vars.session.notifKind = "is-danger"
-    vars.redirect vars.session.prevGetPath
+  if db.getValue(sql"select exists(select 1 from user where email = ?)", email) == "1":
+    vars.notif = "Email <strong>" & email & "</strong> has already been taken"
+    vars.notifKind = "is-danger"
+    vars.redirect vars.prevGetPath
+  
   else:
     let pass = vars.param("password")
     let salt = genSalt(10)
     let hashed = pass.hash(salt)
     db.exec sql"insert into user(email, passHash, passSalt) values(?, ?, ?)", email, hashed, salt
-    vars.session.notif = """Signed up succesfully. You can now <strong><a class="showLoginModal">Log in</a></strong>."""
+    vars.notif = """Signed up succesfully. You can now <strong><a class="showLoginModal">Log in</a></strong>."""
+    vars.redirect vars.prevGetPath
 
 addRoute HttpPost, "/logout", proc(vars: var ReqVars) =
   if vars.userRowid == "":
-    vars.redirect vars.session.prevGetPath
+    vars.redirect vars.prevGetPath
+  
   else:
     db.exec sql"update session set user = NULL where rowid = ?", vars.userRowid
-    vars.session.notif = "Logged out."
+    vars.notif = "Logged out."
+    vars.redirect vars.prevGetPath
 
-echo "\nRunning staticshop server..."
+echo "  Running staticshop server..."
 asyncCheck serve()
 runForever()

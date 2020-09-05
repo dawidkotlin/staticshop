@@ -3,7 +3,12 @@ import sugar, sequtils
 
 type
   ReqVars* = object
-    session*: tuple[notif, notifKind, prevGetPath: string]
+    # session*: tuple[notif, notifKind, prevGetPath: string]
+    
+    ## session vars
+    notif*, notifKind*, prevGetPath*: string
+    
+    ## request vars
     code*: HttpCode
     params: Table[string, seq[string]]
     respHeaders, respBody*, userRowid*, userEmail*, langRowid*: string
@@ -65,6 +70,7 @@ proc parseQuery(s: string, start: int): Table[string, seq[string]] =
     if s[i] == '&':
       inc i
       result.mgetOrPut(key, @[]).add key
+    
     else:
       inc i
       var val: string
@@ -83,9 +89,9 @@ proc serve(client: AsyncSocket) {.async.} =
       var reqHeaders: Table[string, seq[string]]
       
       block outer:
-        ## parse first row
         
-        # var pathWithoutQuery: string
+        ## parse the first row
+        
         let row = await client.recvLine()
         
         if row == "":
@@ -103,7 +109,6 @@ proc serve(client: AsyncSocket) {.async.} =
             vars.code = Http400
             break outer
         
-        # var pathWithQuery: string
         var path: string
 
         if (let ch = row[rowi]; ch in {'\'', '"'}):
@@ -122,7 +127,7 @@ proc serve(client: AsyncSocket) {.async.} =
           vars.code = Http400
           break outer
         
-        ## parse headers
+        ## parse the headers
         
         while true:
           let row = await client.recvLine()
@@ -157,7 +162,7 @@ proc serve(client: AsyncSocket) {.async.} =
           vars.code = Http411
           break outer
         
-        ## parse body if there's any
+        ## parse the body if there's any
         
         if "content-length" in reqHeaders:
           let expectedBytes =
@@ -186,30 +191,54 @@ proc serve(client: AsyncSocket) {.async.} =
               break outer
             
             vars.params = parseQuery(body, 0)
+
+        ## parse cookies        
         
-        ## get or create session vars
+        var cookies: Table[string, string]
+  
+        if "cookie" in reqHeaders:
+          for header in reqHeaders["cookie"]:
+            for pair in header.split("; "):
+              let eq = pair.find('=')
+
+              if eq >= 0:
+                let key = pair.substr(0, eq-1)
+                let val = pair.substr(eq+1)
+                cookies[key] = val
         
-        if "Cookie" in reqHeaders:
-          let cookies = reqHeaders["Cookie"][0].parseCookies()
-          
-          if cookies != nil and sessionKeyCookie in cookies:
-            sessionKey = cookies[sessionKeyCookie]
-            let row = database.row[tuple[data, userRowid: string]](sql"select rowid, data, user from session where key = ?", sessionKey)
-            
-            if row.userRowid != "":
-              vars.userEmail = db.getValue(sql"select email from user where rowid = ?", vars.userRowid)
-              
-              if vars.userEmail != "":
-                vars.userRowid = row.userRowid
-              
-              vars.session = to[vars.session.typeof](row.data)
+        ## set session vars
         
-        if vars.session.prevGetPath == "":
-          vars.session.prevGetPath = "/"
+        block getSession:
+          if sessionKeyCookie in cookies:
+            let row = database.row[tuple[data, userRowid: string]](sql"select rowid, data, user from session where key = ?", cookies[sessionKeyCookie])
+            echo "row.data = ", row.data
+
+            if row.data != "": ## this means the row doesn't exist because the serialized value is never ""
+              sessionKey = cookies[sessionKeyCookie]
+              # vars = try: to[vars.typeof](row.data) except ValueError: break getSession
+              var i = 0
+              inc i, row.data.parseUntil(vars.notif, '\0', i) + 1
+              inc i, row.data.parseUntil(vars.notifKind, '\0', i) + 1
+              inc i, row.data.parseUntil(vars.notifKind, '\0', i) + 1
+
+              if row.userRowid != "":
+                let userEmail = db.getValue(sql"select email from user where rowid = ?", row.userRowid)
+                
+                if userEmail != "":
+                  vars.userRowid = row.userRowid
+                  vars.userEmail = userEmail
+
+        if sessionKey == "":
+          sessionKey = $genOid()
+
+        vars.addHeader "Set-Cookie", sessionKeyCookie & "=" & sessionKey
+
+        if vars.prevGetPath == "":
+          vars.prevGetPath = "/"
+
+        ## find route
         
         vars.code = Http404
-        
-        ## find route
         
         block findRoute:
           if roots[meth] != nil:
@@ -233,8 +262,9 @@ proc serve(client: AsyncSocket) {.async.} =
               vars.addHeader "Content-Type", "text/html"
               
               if meth == HttpGet:
-                reset vars.session
-                vars.session.prevGetPath = path
+                vars.notif = ""
+                vars.notifKind = ""
+                vars.prevGetPath = path
               
               break outer
         
@@ -253,15 +283,11 @@ proc serve(client: AsyncSocket) {.async.} =
       
       assert vars.code != HttpCode(0)
       
-      if sessionKey == "":
-        sessionKey = $genOid()
+      let packedSession = vars.notif & '\0' & vars.notifKind & '\0' & vars.prevGetPath
       
-      vars.session.notif = ""
-      vars.session.notifKind = ""
+      db.exec sql"replace into session(key, data) values (?, ?)", sessionKey, packedSession
 
-      db.exec sql"replace into session(key, data) values (?, ?)", sessionKey, $$vars.session
-      
-      if client.isClosed or "Connection" in reqHeaders and reqHeaders["Connection"][0].toLowerAscii() != "keep-alive":
+      if client.isClosed or "Connection" in reqHeaders and cmpIgnoreCase(reqHeaders["Connection"][^1], "keep-alive") != 0:
         break mainLoop
       
       let resp = "HTTP/1.1 " & toUpperAscii($vars.code) & "\n" & vars.respHeaders & "\r\n" & vars.respBody

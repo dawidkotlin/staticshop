@@ -1,2 +1,5 @@
 - returning the corrent http codes with a body instead of 303 redirects
 - cap max login try speed
+- use SSL
+- use typed sqlite | actually I have to because db_sqlite doesn't hangle binary
+- pack/unpack session on your own
