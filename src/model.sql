@@ -7,7 +7,7 @@ create table langName(
   name varchar not null);
 
 create table user(
-  email varchar not null,
+  email varchar not null unique,
   passHash varchar not null,
   passSalt varchar not null);
 

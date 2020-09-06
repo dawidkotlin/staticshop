@@ -1,31 +1,31 @@
-import tiny_sqlite, strutils, times, os, options, random
+import db_sqlite, strutils, times, os, options, random, macros
 
 when not defined(release):
   removeFile "resources/data.db"
 
 let
-  db* = openDatabase("resources/data.db")
+  db* = db_sqlite.open(connection="resources/data.db", user="", password="", database="")
 
 when not defined(release):
   const modelScript = readFile("src/model.sql")
 
-  db.execScript modelScript
+  for it in modelScript.split(";"):
+    db.exec sql(it)
 
   proc lang(img: string): int64 =
-    db.exec "insert into lang(img) values(?)", img
-    result = db.lastInsertRowId()
+    result = db.insertID(sql"insert into lang(img) values(?)", img)
 
   proc category: int64 =
-    db.exec "insert into category default values"
-    result = db.lastInsertRowId()
+    result = db.insertID(sql"insert into category default values")
 
   proc langName(describingLang, describedLang: int64, name: string) =
-    db.exec "insert into langName(describing, described, name) values (?, ?, ?)", describingLang, describedLang, name
+    db.exec sql"insert into langName(describing, described, name) values (?, ?, ?)", describingLang, describedLang, name
 
-  let pl = lang"https://upload.wikimedia.org/wikipedia/commons/thumb/1/12/Flag_of_Poland.svg/105px-Flag_of_Poland.svg.png"
-  let en = lang"https://upload.wikimedia.org/wikipedia/commons/thumb/a/ae/Flag_of_the_United_Kingdom.svg/105px-Flag_of_the_United_Kingdom.svg.png"
-  let de = lang"https://upload.wikimedia.org/wikipedia/commons/thumb/b/ba/Flag_of_Germany.svg/105px-Flag_of_Germany.svg.png"
-  let es = lang"https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/Flag_of_Spain.svg/105px-Flag_of_Spain.svg.png"
+  let
+    pl = lang"https://upload.wikimedia.org/wikipedia/commons/thumb/1/12/Flag_of_Poland.svg/105px-Flag_of_Poland.svg.png"
+    en = lang"https://upload.wikimedia.org/wikipedia/commons/thumb/a/ae/Flag_of_the_United_Kingdom.svg/105px-Flag_of_the_United_Kingdom.svg.png"
+    de = lang"https://upload.wikimedia.org/wikipedia/commons/thumb/b/ba/Flag_of_Germany.svg/105px-Flag_of_Germany.svg.png"
+    es = lang"https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/Flag_of_Spain.svg/105px-Flag_of_Spain.svg.png"
   
   langName pl, pl, "polski"
   langName pl, en, "angielski"
@@ -48,7 +48,7 @@ when not defined(release):
   langName es, es, "española"
 
   proc categoryName(lang, cat: int64, name: string) =
-    db.exec "insert into categoryName(lang, category, name) values (?, ?, ?)", lang, cat, name
+    db.exec sql"insert into categoryName(lang, category, name) values (?, ?, ?)", lang, cat, name
 
   let
     scifi = category()
@@ -140,29 +140,42 @@ when not defined(release):
   product 1979, drama, "https://media.timeout.com/images/105456033/750/422/image.jpg",
     (en, "Apocalypse Now", "Francis Ford Coppola’s evergreen Vietnam War classic proves war is swell, as assassin Martin Sheen heads upriver to kill renegade colonel Marlon Brando. En route, there’s surfing, a thrilling helicopter raid, napalm smelling, tigers and Playboy bunnies, until Sheen steps off the boat and into a different zone of madness—or is it genius? Who knows at this point?—Ian Freer")
 
-proc unpack(value: string, result: var string) =
-  result = value
+macro unpackTo*(row: seq[string], vars: varargs[untyped]) =
+  template asgn(thisVar, row, i) =
+    thisVar = if i <= row.high: row[i] else: ""
+  
+  result = newStmtList()
+  for i in 0 ..< vars.len:
+    result.add getAst asgn(vars[i], row, i)
 
-proc unpack(value: string, result: var BiggestInt) =
-  result = parseBiggestInt(value)
+# proc row*(sql: string, params: varargs[DbValue, toDbValue]): ResultRow =
+#   for it in db.iterate(sql, params):
+#     result = it
+#     break
 
-proc unpack[T](value: string, result: var Option[T]) =
-  result = some parseBiggestInt(value)
+# proc unpack(value: string, result: var string) =
+#   result = value
 
-template unpack(row: seq[string], result: var tuple) =
-  var i = 0
-  for it in result.fields:
-    if i <= row.high:
-      unpack row[i], it
-      inc i
-    else:
-      break
+# proc unpack(value: string, result: var BiggestInt) =
+#   result = parseBiggestInt(value)
 
-proc row*[T: tuple](query: SqlQuery, args: varargs[string, `$`]): T =
-  unpack db.getRow(query, args), result
+# proc unpack[T](value: string, result: var Option[T]) =
+#   result = some parseBiggestInt(value)
 
-iterator rows*[T: tuple](query: SqlQuery, args: varargs[string, `$`]): T =
-  var unpacked: T
-  for row in db.fastRows(query, args):
-    unpack row, unpacked
-    yield unpacked
+# template unpack(row: seq[string], result: var tuple) =
+#   var i = 0
+#   for it in result.fields:
+#     if i <= row.high:
+#       unpack row[i], it
+#       inc i
+#     else:
+#       break
+
+# proc row*[T: tuple](query: string, args: varargs[DbValue, toDbValue]): T =
+#   unpack db.getRow(query, args), result
+
+# iterator rows*[T: tuple](query: string, args: varargs[DbValue, toDbValue]): T =
+#   var unpacked: T
+#   for row in db.fastRows(query, args):
+#     unpack row, unpacked
+#     yield unpacked

@@ -1,4 +1,4 @@
-import tables, httpcore, strutils, parseutils, asyncnet, asyncdispatch, strtabs, strformat, strutils, std/[exitprocs, wrapnils], os, cookies, marshal, db_sqlite, oids, database
+import tables, httpcore, strutils, parseutils, asyncnet, asyncdispatch, strtabs, strformat, strutils, std/[exitprocs, wrapnils], os, cookies, marshal, oids, database, db_sqlite, uri
 import sugar, sequtils
 
 type
@@ -11,7 +11,7 @@ type
     ## request vars
     code*: HttpCode
     params: Table[string, seq[string]]
-    respHeaders, respBody*, userRowid*, userEmail*, langRowid*: string
+    respHeaders, respBody*, userRowid*, userEmail*, langRowid*, sessionId*: string
   
   NodeCb = proc(reqVars: var ReqVars) {.nimcall.}
   
@@ -38,22 +38,18 @@ proc addRoute*(meth: HttpMethod, path: string, cb: NodeCb) =
 proc addHeader*(vars: var ReqVars, key, val: string) =
   vars.respHeaders.add &"{key}: {val}\n"
 
-proc redirect*(vars: var ReqVars, path: string) =
-  vars.addHeader "Location", path
-  vars.code = Http303
-
 proc param*(vars: var ReqVars, key: string): string =
   let key = key.toLowerAscii()
   
   if key in vars.params:
-    result = vars.params[key][0]
+    result = vars.params[key][0].decodeUrl()
 
 iterator params*(vars: var ReqVars, key: string): string =
   let key = key.toLowerAscii()
   
   if key in vars.params:
     for it in vars.params[key]:
-      yield it
+      yield it.decodeUrl()
 
 proc parseQuery(s: string, start: int): Table[string, seq[string]] =
   var i = 0
@@ -83,13 +79,12 @@ proc serve(client: AsyncSocket) {.async.} =
   
   block mainLoop:
     while true:
-      var sessionKey: string
+      # var sessionRowid: string
+      var reqHeaders: Table[string, seq[string]]
       var vars: ReqVars
       vars.langRowid = "2" ## en
-      var reqHeaders: Table[string, seq[string]]
-      
+
       block outer:
-        
         ## parse the first row
         
         let row = await client.recvLine()
@@ -200,7 +195,6 @@ proc serve(client: AsyncSocket) {.async.} =
           for header in reqHeaders["cookie"]:
             for pair in header.split("; "):
               let eq = pair.find('=')
-
               if eq >= 0:
                 let key = pair.substr(0, eq-1)
                 let val = pair.substr(eq+1)
@@ -210,31 +204,30 @@ proc serve(client: AsyncSocket) {.async.} =
         
         block getSession:
           if sessionKeyCookie in cookies:
-            let row = database.row[tuple[data, userRowid: string]](sql"select rowid, data, user from session where key = ?", cookies[sessionKeyCookie])
-            echo "row.data = ", row.data
+            var packedSession, userRowid: string
+            let row = db.getRow(sql"select rowid, data, user from session where key = ?", cookies[sessionKeyCookie])
+            row.unpackTo vars.sessionId, packedSession, userRowid
 
-            if row.data != "": ## this means the row doesn't exist because the serialized value is never ""
-              sessionKey = cookies[sessionKeyCookie]
-              # vars = try: to[vars.typeof](row.data) except ValueError: break getSession
+            if vars.sessionId != "":
               var i = 0
-              inc i, row.data.parseUntil(vars.notif, '\0', i) + 1
-              inc i, row.data.parseUntil(vars.notifKind, '\0', i) + 1
-              inc i, row.data.parseUntil(vars.notifKind, '\0', i) + 1
+              inc i, packedSession.parseUntil(vars.notif, '@', i) + 1
+              inc i, packedSession.parseUntil(vars.notifKind, '@', i) + 1
+              inc i, packedSession.parseUntil(vars.prevGetPath, '@', i) + 1
 
-              if row.userRowid != "":
-                let userEmail = db.getValue(sql"select email from user where rowid = ?", row.userRowid)
-                
+              if vars.prevGetPath == "":
+                vars.prevGetPath = "/"
+
+              if userRowid != "":
+                let userEmail = db.getValue(sql"select email from user where rowid = ?", userRowid)
                 if userEmail != "":
-                  vars.userRowid = row.userRowid
+                  vars.userRowid = userRowid
                   vars.userEmail = userEmail
-
-        if sessionKey == "":
-          sessionKey = $genOid()
-
-        vars.addHeader "Set-Cookie", sessionKeyCookie & "=" & sessionKey
-
-        if vars.prevGetPath == "":
-          vars.prevGetPath = "/"
+            
+            else:
+              let key = $genOid()
+              vars.addHeader "Set-Cookie", sessionKeyCookie & "=" & key
+              let data = ""
+              vars.sessionId = $db.insertID(sql"insert into session(key, data) values (?, ?)", key, data)
 
         ## find route
         
@@ -283,17 +276,18 @@ proc serve(client: AsyncSocket) {.async.} =
       
       assert vars.code != HttpCode(0)
       
-      let packedSession = vars.notif & '\0' & vars.notifKind & '\0' & vars.prevGetPath
-      
-      db.exec sql"replace into session(key, data) values (?, ?)", sessionKey, packedSession
-
-      if client.isClosed or "Connection" in reqHeaders and cmpIgnoreCase(reqHeaders["Connection"][^1], "keep-alive") != 0:
-        break mainLoop
+      let sessionVars = vars.notif & '@' & vars.notifKind & '@' & vars.prevGetPath
+      db.exec sql"update session set data = ? where rowid = ?", sessionVars, vars.sessionId
       
       let resp = "HTTP/1.1 " & toUpperAscii($vars.code) & "\n" & vars.respHeaders & "\r\n" & vars.respBody
       await client.send resp
-  
-  client.close()
+
+      if client.isClosed:
+        break mainLoop
+      
+      if "Connection" in reqHeaders and cmpIgnoreCase(reqHeaders["Connection"][^1], "keep-alive") != 0:
+        client.close()
+        break mainLoop
 
 proc serve* {.async.} =
   let server = newAsyncSocket()
