@@ -30,10 +30,12 @@ create table categoryName(
   lang integer not null references lang(rowid),
   name varchar not null);
 
+create virtual table productNameImpl using fts5(name);
+
 create table productName(
   product integer not null references product(rowid),
   lang integer not null references lang(rowid),
-  name varchar not null);
+  nameId integer not null references productNameImpl(rowid));
 
 create table productDesc(
   product integer not null references product(rowid),
@@ -42,4 +44,8 @@ create table productDesc(
 
 create table purchase(
   user integer not null references user(rowid),
-  product integer not null references product(rowid))
+  product integer not null references product(rowid));
+
+create table cartItem(
+  product integer not null references product(rowid),
+  user integer not null references user(rowid));

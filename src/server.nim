@@ -11,7 +11,7 @@ type
     ## request vars
     code*: HttpCode
     params: Table[string, seq[string]]
-    respHeaders, respBody*, userRowid*, userEmail*, langRowid*, sessionId*: string
+    respHeaders, respBody*, userId*, userEmail*, langRowid*, sessionId*, pathWithQuery: string
   
   NodeCb = proc(reqVars: var ReqVars) {.nimcall.}
   
@@ -38,6 +38,10 @@ proc addRoute*(meth: HttpMethod, path: string, cb: NodeCb) =
 proc addHeader*(vars: var ReqVars, key, val: string) =
   vars.respHeaders.add &"{key}: {val}\n"
 
+proc hasParam*(vars: var ReqVars, key: string): bool =
+  let key = key.toLowerAscii()
+  result = key in vars.params
+
 proc param*(vars: var ReqVars, key: string): string =
   let key = key.toLowerAscii()
   
@@ -51,8 +55,13 @@ iterator params*(vars: var ReqVars, key: string): string =
     for it in vars.params[key]:
       yield it.decodeUrl()
 
+iterator params*(vars: var ReqVars): tuple[key, val: string] =
+  for key in vars.params.keys:
+    for val in vars.params[key]:
+      yield (key, val)
+
 proc parseQuery(s: string, start: int): Table[string, seq[string]] =
-  var i = 0
+  var i = start
   
   while i <= s.high:
     var key: string
@@ -79,10 +88,11 @@ proc serve(client: AsyncSocket) {.async.} =
   
   block mainLoop:
     while true:
-      # var sessionRowid: string
+      var meth: HttpMethod
       var reqHeaders: Table[string, seq[string]]
       var vars: ReqVars
       vars.langRowid = "2" ## en
+      vars.code = Http404
 
       block outer:
         ## parse the first row
@@ -96,7 +106,7 @@ proc serve(client: AsyncSocket) {.async.} =
         var methodStr: string
         rowi += row.parseUntil(methodStr, Whitespace, rowi) + 1
         
-        let meth =
+        meth =
           case methodStr
           of "GET": HttpGet
           of "POST": HttpPost
@@ -111,9 +121,10 @@ proc serve(client: AsyncSocket) {.async.} =
         else:
           inc rowi, row.parseUntil(path, Whitespace, rowi) + 1
         
+        vars.pathWithQuery = path
+
         if meth == HttpGet:
           let i = path.rfind('?')
-          
           if i >= 0:
             vars.params = parseQuery(path, i+1)
             path = path.substr(0, i-1)
@@ -204,23 +215,23 @@ proc serve(client: AsyncSocket) {.async.} =
         
         block getSession:
           if sessionKeyCookie in cookies:
-            var packedSession, userRowid: string
+            var packedSession, userId: string
             let row = db.getRow(sql"select rowid, data, user from session where key = ?", cookies[sessionKeyCookie])
-            row.unpackTo vars.sessionId, packedSession, userRowid
+            row.unpackTo vars.sessionId, packedSession, userId
 
             if vars.sessionId != "":
               var i = 0
-              inc i, packedSession.parseUntil(vars.notif, '@', i) + 1
-              inc i, packedSession.parseUntil(vars.notifKind, '@', i) + 1
-              inc i, packedSession.parseUntil(vars.prevGetPath, '@', i) + 1
+              inc i, packedSession.parseUntil(vars.notif, '\1', i) + 1
+              inc i, packedSession.parseUntil(vars.notifKind, '\1', i) + 1
+              inc i, packedSession.parseUntil(vars.prevGetPath, '\1', i) + 1
 
               if vars.prevGetPath == "":
                 vars.prevGetPath = "/"
 
-              if userRowid != "":
-                let userEmail = db.getValue(sql"select email from user where rowid = ?", userRowid)
+              if userId != "":
+                let userEmail = db.getValue(sql"select email from user where rowid = ?", userId)
                 if userEmail != "":
-                  vars.userRowid = userRowid
+                  vars.userId = userId
                   vars.userEmail = userEmail
             
             else:
@@ -231,16 +242,15 @@ proc serve(client: AsyncSocket) {.async.} =
 
         ## find route
         
-        vars.code = Http404
-        
         block findRoute:
           if roots[meth] != nil:
             var node = roots[meth]
             var pathi = path.find('/') + 1
             var token: string
-            let queryStart = if (let i = path.rfind('?'); i >= 0): i else: path.high
-            
-            while pathi < queryStart:
+            # let i = path.rfind('?')
+            # let pathEnd = if i >= 0: i else: path.high
+
+            while pathi <= path.high:
               pathi += path.parseUntil(token, '/', pathi) + 1
               
               if token notin node.kids:
@@ -257,7 +267,7 @@ proc serve(client: AsyncSocket) {.async.} =
               if meth == HttpGet:
                 vars.notif = ""
                 vars.notifKind = ""
-                vars.prevGetPath = path
+                vars.prevGetPath = vars.pathWithQuery
               
               break outer
         
@@ -266,26 +276,35 @@ proc serve(client: AsyncSocket) {.async.} =
         if meth == HttpGet:
           let filepath = "public" / path
   
-          if fileExists(filepath) and (let split = expandFilename(filepath).splitFile(); split.dir == getAppDir() / "public" and split.ext in extToMime):
-            vars.code = Http200
-            vars.respBody = readFile filepath
-            vars.addHeader "Content-Type", extToMime[split.ext]
-            vars.addHeader "Content-Length", $(vars.respBody.len)
+          if fileExists(filepath):
+            let file = expandFilename(filepath).splitFile()
+            
+            if file.dir == getAppDir() / "public" and file.ext in extToMime:
+              vars.code = Http200
+              vars.respBody = readFile filepath
+              vars.addHeader "Content-Type", extToMime[file.ext]
+              vars.addHeader "Content-Length", $(vars.respBody.len)
+        
+        ## the resource hasn't been found, do I need this header for browser to say 404?
+        
+        vars.addHeader "Content-Type", "text/html"
+        vars.respBody = $vars.code
 
-        vars.code = Http404
+      let sessionVars = vars.notif & '\1' & vars.notifKind & '\1' & vars.prevGetPath
       
-      assert vars.code != HttpCode(0)
-      
-      let sessionVars = vars.notif & '@' & vars.notifKind & '@' & vars.prevGetPath
       db.exec sql"update session set data = ? where rowid = ?", sessionVars, vars.sessionId
       
-      let resp = "HTTP/1.1 " & toUpperAscii($vars.code) & "\n" & vars.respHeaders & "\r\n" & vars.respBody
+      let resp =
+        "HTTP/1.1 " & toUpperAscii($vars.code) & "\n" &
+        vars.respHeaders &
+        "\r\n" &
+        vars.respBody
+      
       await client.send resp
 
-      if client.isClosed:
-        break mainLoop
-      
-      if "Connection" in reqHeaders and cmpIgnoreCase(reqHeaders["Connection"][^1], "keep-alive") != 0:
+      if meth == HttpPost or client.isClosed or
+         "Connection" in reqHeaders and cmpIgnoreCase(reqHeaders["Connection"][^1], "keep-alive") != 0:
+        
         client.close()
         break mainLoop
 

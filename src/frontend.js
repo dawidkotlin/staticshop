@@ -53,6 +53,72 @@ NTI2387637.base = NTI2387633;
 var NNI2387641 = {kind: 2, len: 0, offset: 0, typ: null, name: null, sons: []};
 NTI2387641.node = NNI2387641;
 NTI2387641.base = NTI2387619;
+function toJSStr(s_2650096) {
+                    var Tmp5;
+            var Tmp7;
+
+  var result_2650097 = null;
+
+    var res_2650170 = newSeq_2650128((s_2650096).length);
+    var i_2650172 = 0;
+    var j_2650174 = 0;
+    L1: do {
+        L2: while (true) {
+        if (!(i_2650172 < (s_2650096).length)) break L2;
+          var c_2650175 = s_2650096[i_2650172];
+          if ((c_2650175 < 128)) {
+          res_2650170[j_2650174] = String.fromCharCode(c_2650175);
+          i_2650172 += 1;
+          }
+          else {
+            var helper_2650198 = newSeq_2650128(0);
+            L3: do {
+                L4: while (true) {
+                if (!true) break L4;
+                  var code_2650199 = c_2650175.toString(16);
+                  if (((code_2650199).length == 1)) {
+                  helper_2650198.push("%0");;
+                  }
+                  else {
+                  helper_2650198.push("%");;
+                  }
+                  
+                  helper_2650198.push(code_2650199);;
+                  i_2650172 += 1;
+                    if (((s_2650096).length <= i_2650172)) Tmp5 = true; else {                      Tmp5 = (s_2650096[i_2650172] < 128);                    }                  if (Tmp5) {
+                  break L3;
+                  }
+                  
+                  c_2650175 = s_2650096[i_2650172];
+                }
+            } while(false);
+++excHandler;
+            Tmp7 = framePtr;
+            try {
+            res_2650170[j_2650174] = decodeURIComponent(helper_2650198.join(""));
+--excHandler;
+} catch (EXC) {
+ var prevJSError = lastJSError;
+ lastJSError = EXC;
+ --excHandler;
+            framePtr = Tmp7;
+            res_2650170[j_2650174] = helper_2650198.join("");
+            lastJSError = prevJSError;
+            } finally {
+            framePtr = Tmp7;
+            }
+          }
+          
+          j_2650174 += 1;
+        }
+    } while(false);
+    if (res_2650170.length < j_2650174) { for (var i=res_2650170.length;i<j_2650174;++i) res_2650170.push(null); }
+               else { res_2650170.length = j_2650174; };
+    result_2650097 = res_2650170.join("");
+
+  return result_2650097;
+
+}
 function makeNimstrLit(c_2650062) {
       var ln = c_2650062.length;
   var result = new Array(ln);
@@ -204,72 +270,6 @@ function arrayConstr(len_2675067, value_2675068, typ_2675069) {
   
 
   
-}
-function toJSStr(s_2650096) {
-                    var Tmp5;
-            var Tmp7;
-
-  var result_2650097 = null;
-
-    var res_2650170 = newSeq_2650128((s_2650096).length);
-    var i_2650172 = 0;
-    var j_2650174 = 0;
-    L1: do {
-        L2: while (true) {
-        if (!(i_2650172 < (s_2650096).length)) break L2;
-          var c_2650175 = s_2650096[i_2650172];
-          if ((c_2650175 < 128)) {
-          res_2650170[j_2650174] = String.fromCharCode(c_2650175);
-          i_2650172 += 1;
-          }
-          else {
-            var helper_2650198 = newSeq_2650128(0);
-            L3: do {
-                L4: while (true) {
-                if (!true) break L4;
-                  var code_2650199 = c_2650175.toString(16);
-                  if (((code_2650199).length == 1)) {
-                  helper_2650198.push("%0");;
-                  }
-                  else {
-                  helper_2650198.push("%");;
-                  }
-                  
-                  helper_2650198.push(code_2650199);;
-                  i_2650172 += 1;
-                    if (((s_2650096).length <= i_2650172)) Tmp5 = true; else {                      Tmp5 = (s_2650096[i_2650172] < 128);                    }                  if (Tmp5) {
-                  break L3;
-                  }
-                  
-                  c_2650175 = s_2650096[i_2650172];
-                }
-            } while(false);
-++excHandler;
-            Tmp7 = framePtr;
-            try {
-            res_2650170[j_2650174] = decodeURIComponent(helper_2650198.join(""));
---excHandler;
-} catch (EXC) {
- var prevJSError = lastJSError;
- lastJSError = EXC;
- --excHandler;
-            framePtr = Tmp7;
-            res_2650170[j_2650174] = helper_2650198.join("");
-            lastJSError = prevJSError;
-            } finally {
-            framePtr = Tmp7;
-            }
-          }
-          
-          j_2650174 += 1;
-        }
-    } while(false);
-    if (res_2650170.length < j_2650174) { for (var i=res_2650170.length;i<j_2650174;++i) res_2650170.push(null); }
-               else { res_2650170.length = j_2650174; };
-    result_2650097 = res_2650170.join("");
-
-  return result_2650097;
-
 }
 function raiseException(e_2615218, ename_2615219) {
     e_2615218.name = ename_2615219;
@@ -855,24 +855,16 @@ framePtr = F.prev;
 var F={procname:"module frontend",prev:framePtr,filename:"/home/dk/Documents/Nim/staticshop/src/frontend.nim",line:0};
 framePtr = F;
 framePtr = F.prev;
-function addEventListener_3095653(it_3095656, event_3095657, callback_3095658) {
-    function HEX3Aanonymous_3095659(__3095661) {
-      var F={procname:"addEventListener.:anonymous",prev:framePtr,filename:"/home/dk/Documents/Nim/staticshop/src/frontend.nim",line:0};
-      framePtr = F;
-        F.line = 6;
-        callback_3095658();
-      framePtr = F.prev;
+function newSeq_2650128(len_2650131) {
+  var result_2650133 = [];
 
-      
-    }
-
-  var F={procname:"addEventListener.addEventListener",prev:framePtr,filename:"/home/dk/Documents/Nim/staticshop/src/frontend.nim",line:0};
+  var F={procname:"newSeq.newSeq",prev:framePtr,filename:"/home/dk/.choosenim/toolchains/nim-#devel/lib/system.nim",line:0};
   framePtr = F;
-    F.line = 6;
-    it_3095656.addEventListener(event_3095657, HEX3Aanonymous_3095659, false);
-  framePtr = F.prev;
+    F.line = 654;
+    result_2650133 = new Array(len_2650131); for (var i=0;i<len_2650131;++i) {result_2650133[i]=null;}  framePtr = F.prev;
 
-  
+  return result_2650133;
+
 }
 function isFatPointer_2660401(ti_2660403) {
   var result_2660404 = false;
@@ -957,13 +949,13 @@ function auxWriteStackTrace_2575038(f_2575040) {
     
     L6: do {
       var j_2590236 = 0;
-      var colontmp__3095730 = 0;
-      colontmp__3095730 = (i_2575053 - 1);
-      var res_3095735 = colontmp__3095730;
+      var colontmp__3095471 = 0;
+      colontmp__3095471 = (i_2575053 - 1);
+      var res_3095476 = colontmp__3095471;
       L7: do {
           L8: while (true) {
-          if (!(0 <= res_3095735)) break L8;
-            j_2590236 = res_3095735;
+          if (!(0 <= res_3095476)) break L8;
+            j_2590236 = res_3095476;
             result_2575041[0].push.apply(result_2575041[0], cstrToNimstr(tempFrames_2575062[j_2590236].Field2));;
             if ((0 < tempFrames_2575062[j_2590236].Field1)) {
             result_2575041[0].push.apply(result_2575041[0], makeNimstrLit("("));;
@@ -979,7 +971,7 @@ function auxWriteStackTrace_2575038(f_2575040) {
             result_2575041[0].push.apply(result_2575041[0], makeNimstrLit(" at "));;
             add_2552042(result_2575041, 0, tempFrames_2575062[j_2590236].Field0);
             result_2575041[0].push.apply(result_2575041[0], makeNimstrLit("\x0A"));;
-            res_3095735 -= 1;
+            res_3095476 -= 1;
           }
       } while(false);
     } while(false);
@@ -999,17 +991,6 @@ function rawWriteStackTrace_2605260() {
     
 
   return result_2605262;
-
-}
-function newSeq_2650128(len_2650131) {
-  var result_2650133 = [];
-
-  var F={procname:"newSeq.newSeq",prev:framePtr,filename:"/home/dk/.choosenim/toolchains/nim-#devel/lib/system.nim",line:0};
-  framePtr = F;
-    F.line = 654;
-    result_2650133 = new Array(len_2650131); for (var i=0;i<len_2650131;++i) {result_2650133[i]=null;}  framePtr = F.prev;
-
-  return result_2650133;
 
 }
 function unhandledException(e_2610059) {
@@ -1052,25 +1033,6 @@ function raiseIndexError(i_2635047, a_2635048, b_2635049) {
 
   
 }
-function addEventListener_3095238(it_3095241, event_3095242, callback_3095243) {
-    function HEX3Aanonymous_3095244(__3095246) {
-      var F={procname:"addEventListener.:anonymous",prev:framePtr,filename:"/home/dk/Documents/Nim/staticshop/src/frontend.nim",line:0};
-      framePtr = F;
-        F.line = 6;
-        callback_3095243();
-      framePtr = F.prev;
-
-      
-    }
-
-  var F={procname:"addEventListener.addEventListener",prev:framePtr,filename:"/home/dk/Documents/Nim/staticshop/src/frontend.nim",line:0};
-  framePtr = F;
-    F.line = 6;
-    it_3095241.addEventListener(event_3095242, HEX3Aanonymous_3095244, false);
-  framePtr = F.prev;
-
-  
-}
 function raiseOverflow() {
     raiseException({message: makeNimstrLit("over- or underflow"), parent: null, m_type: NTI2387637, name: null, trace: [], up: null}, "OverflowDefect");
 
@@ -1109,154 +1071,57 @@ function failedAssertImpl_2500480(msg_2500482) {
 
   
 }
-function HEX3Aanonymous_3095438() {
-            function HEX3Aanonymous_3095456() {
-              var F={procname:":anonymous.:anonymous",prev:framePtr,filename:"/home/dk/Documents/Nim/staticshop/src/frontend.nim",line:0};
+function addModalHandlers_3086021(modal_3086023, showButton_3086024) {
+            function HEX3Aanonymous_3095222(__3095245) {
+              var F={procname:"addModalHandlers.:anonymous",prev:framePtr,filename:"/home/dk/Documents/Nim/staticshop/src/frontend.nim",line:0};
               framePtr = F;
-                F.line = 13;
-                modal_3095448.classList.add("is-active");
+                F.line = 9;
+                modal_3095215.classList.add("is-active");
               framePtr = F.prev;
 
               
             }
-            function HEX3Aanonymous_3095478() {
-              var F={procname:":anonymous.:anonymous",prev:framePtr,filename:"/home/dk/Documents/Nim/staticshop/src/frontend.nim",line:0};
+            function HEX3Aanonymous_3095248(__3095271) {
+              var F={procname:"addModalHandlers.:anonymous",prev:framePtr,filename:"/home/dk/Documents/Nim/staticshop/src/frontend.nim",line:0};
               framePtr = F;
-                F.line = 14;
-                modal_3095448.classList.remove("is-active");
-              framePtr = F.prev;
-
-              
-            }
-            function HEX3Aanonymous_3095515() {
-              var F={procname:":anonymous.:anonymous",prev:framePtr,filename:"/home/dk/Documents/Nim/staticshop/src/frontend.nim",line:0};
-              framePtr = F;
-                F.line = 20;
-                modal_3095507.classList.add("is-active");
-              framePtr = F.prev;
-
-              
-            }
-            function HEX3Aanonymous_3095537() {
-              var F={procname:":anonymous.:anonymous",prev:framePtr,filename:"/home/dk/Documents/Nim/staticshop/src/frontend.nim",line:0};
-              framePtr = F;
-                F.line = 21;
-                modal_3095507.classList.remove("is-active");
-              framePtr = F.prev;
-
-              
-            }
-            function HEX3Aanonymous_3095574() {
-              var F={procname:":anonymous.:anonymous",prev:framePtr,filename:"/home/dk/Documents/Nim/staticshop/src/frontend.nim",line:0};
-              framePtr = F;
-                F.line = 27;
-                parent_3095566.removeChild(notif_3095565[notif_3095565_Idx]);
+                F.line = 10;
+                modal_3095215.classList.remove("is-active");
               framePtr = F.prev;
 
               
             }
 
-  var F={procname:"frontend.:anonymous",prev:framePtr,filename:"/home/dk/Documents/Nim/staticshop/src/frontend.nim",line:0};
+  var F={procname:"frontend.addModalHandlers",prev:framePtr,filename:"/home/dk/Documents/Nim/staticshop/src/frontend.nim",line:0};
   framePtr = F;
     L1: do {
-      F.line = 10;
-      var show_3095447 = null;
-      var show_3095447_Idx = 0;
+      F.line = 6;
+      var show_3095214 = null;
+      var show_3095214_Idx = 0;
       F.line = 197;
-      var colontmp__3095703 = [];
-      F.line = 10;
-      colontmp__3095703 = document.querySelectorAll("#showSignupModal");
+      var colontmp__3095453 = [];
+      F.line = 6;
+      colontmp__3095453 = document.querySelectorAll(toJSStr(showButton_3086024));
       F.line = 199;
-      var i_3095705 = 0;
+      var i_3095454 = 0;
       F.line = 200;
-      var L_3095706 = (colontmp__3095703).length;
+      var L_3095455 = (colontmp__3095453).length;
       L2: do {
         F.line = 201;
           L3: while (true) {
-          if (!(i_3095705 < L_3095706)) break L3;
+          if (!(i_3095454 < L_3095455)) break L3;
+            F.line = 6;
+            show_3095214 = colontmp__3095453; show_3095214_Idx = chckIndx(i_3095454, 0, (colontmp__3095453).length-1);
+            F.line = 7;
+            var modal_3095215 = document.querySelector(toJSStr(modal_3086023));
+            F.line = 8;
+            var hide_3095221 = modal_3095215.querySelector(".modal-close");
+            F.line = 9;
+            show_3095214[show_3095214_Idx].addEventListener("click", HEX3Aanonymous_3095222, false);
             F.line = 10;
-            show_3095447 = colontmp__3095703; show_3095447_Idx = chckIndx(i_3095705, 0, (colontmp__3095703).length-1);
-            F.line = 11;
-            var modal_3095448 = document.querySelector("#signupModal");
-            F.line = 12;
-            var hide_3095454 = modal_3095448.querySelector(".modal-close");
-            F.line = 13;
-            addEventListener_3095238(show_3095447[show_3095447_Idx], "click", HEX3Aanonymous_3095456);
-            F.line = 14;
-            addEventListener_3095238(hide_3095454, "click", HEX3Aanonymous_3095478);
+            hide_3095221.addEventListener("click", HEX3Aanonymous_3095248, false);
             F.line = 203;
-            i_3095705 = addInt(i_3095705, 1);
-            if (!(((colontmp__3095703).length == L_3095706))) {
-            F.line = 204;
-            failedAssertImpl_2500480(makeNimstrLit("/home/dk/.choosenim/toolchains/nim-#devel/lib/system/iterators.nim(204, 11) `len(a) == L` the length of the seq changed while iterating over it"));
-            }
-            
-          }
-      } while(false);
-    } while(false);
-    L4: do {
-      F.line = 17;
-      var show_3095506 = null;
-      var show_3095506_Idx = 0;
-      F.line = 197;
-      var colontmp__3095709 = [];
-      F.line = 17;
-      colontmp__3095709 = document.querySelectorAll("#showLoginModal");
-      F.line = 199;
-      var i_3095710 = 0;
-      F.line = 200;
-      var L_3095711 = (colontmp__3095709).length;
-      L5: do {
-        F.line = 201;
-          L6: while (true) {
-          if (!(i_3095710 < L_3095711)) break L6;
-            F.line = 17;
-            show_3095506 = colontmp__3095709; show_3095506_Idx = chckIndx(i_3095710, 0, (colontmp__3095709).length-1);
-            F.line = 18;
-            var modal_3095507 = document.querySelector("#loginModal");
-            F.line = 19;
-            var hide_3095513 = modal_3095507.querySelector(".modal-close");
-            F.line = 20;
-            addEventListener_3095238(show_3095506[show_3095506_Idx], "click", HEX3Aanonymous_3095515);
-            F.line = 21;
-            addEventListener_3095238(hide_3095513, "click", HEX3Aanonymous_3095537);
-            F.line = 203;
-            i_3095710 = addInt(i_3095710, 1);
-            if (!(((colontmp__3095709).length == L_3095711))) {
-            F.line = 204;
-            failedAssertImpl_2500480(makeNimstrLit("/home/dk/.choosenim/toolchains/nim-#devel/lib/system/iterators.nim(204, 11) `len(a) == L` the length of the seq changed while iterating over it"));
-            }
-            
-          }
-      } while(false);
-    } while(false);
-    L7: do {
-      F.line = 24;
-      var notif_3095565 = null;
-      var notif_3095565_Idx = 0;
-      F.line = 197;
-      var colontmp__3095714 = [];
-      F.line = 24;
-      colontmp__3095714 = document.querySelectorAll(".notification");
-      F.line = 199;
-      var i_3095715 = 0;
-      F.line = 200;
-      var L_3095716 = (colontmp__3095714).length;
-      L8: do {
-        F.line = 201;
-          L9: while (true) {
-          if (!(i_3095715 < L_3095716)) break L9;
-            F.line = 24;
-            notif_3095565 = colontmp__3095714; notif_3095565_Idx = chckIndx(i_3095715, 0, (colontmp__3095714).length-1);
-            F.line = 25;
-            var parent_3095566 = notif_3095565[notif_3095565_Idx].parentNode;
-            F.line = 26;
-            var close_3095572 = notif_3095565[notif_3095565_Idx].querySelector(".delete");
-            F.line = 27;
-            addEventListener_3095238(close_3095572, "click", HEX3Aanonymous_3095574);
-            F.line = 203;
-            i_3095715 = addInt(i_3095715, 1);
-            if (!(((colontmp__3095714).length == L_3095716))) {
+            i_3095454 = addInt(i_3095454, 1);
+            if (!(((colontmp__3095453).length == L_3095455))) {
             F.line = 204;
             failedAssertImpl_2500480(makeNimstrLit("/home/dk/.choosenim/toolchains/nim-#devel/lib/system/iterators.nim(204, 11) `len(a) == L` the length of the seq changed while iterating over it"));
             }
@@ -1268,10 +1133,54 @@ function HEX3Aanonymous_3095438() {
 
   
 }
+function HEX3Aanonymous_3095377(__3095415) {
+  var F={procname:"frontend.:anonymous",prev:framePtr,filename:"/home/dk/Documents/Nim/staticshop/src/frontend.nim",line:0};
+  framePtr = F;
+    F.line = 18;
+    parent_3095370.removeChild(notif_3095369[0][0][notif_3095369[0][1]]);
+  framePtr = F.prev;
+
+  
+}
 var F={procname:"module frontend",prev:framePtr,filename:"/home/dk/Documents/Nim/staticshop/src/frontend.nim",line:0};
 framePtr = F;
-F.line = 8;
-addEventListener_3095653(document, "DOMContentLoaded", HEX3Aanonymous_3095438);
+F.line = 12;
+addModalHandlers_3086021(makeNimstrLit("#signupModal"), makeNimstrLit("#showSignupModal"));
+F.line = 13;
+addModalHandlers_3086021(makeNimstrLit("#loginModal"), makeNimstrLit("#showLoginModal"));
+L1: do {
+  F.line = 15;
+  var notif_3095369 = [[null, 0]];
+  F.line = 197;
+  var colontmp__3095447 = [];
+  F.line = 15;
+  colontmp__3095447 = document.querySelectorAll(".notification");
+  F.line = 199;
+  var i_3095449 = 0;
+  F.line = 200;
+  var L_3095450 = (colontmp__3095447).length;
+  L2: do {
+    F.line = 201;
+      L3: while (true) {
+      if (!(i_3095449 < L_3095450)) break L3;
+        F.line = 15;
+        notif_3095369[0][0] = colontmp__3095447; notif_3095369[0][1] = chckIndx(i_3095449, 0, (colontmp__3095447).length-1);
+        F.line = 16;
+        var parent_3095370 = notif_3095369[0][0][notif_3095369[0][1]].parentNode;
+        F.line = 17;
+        var close_3095376 = notif_3095369[0][0][notif_3095369[0][1]].querySelector(".delete");
+        F.line = 18;
+        close_3095376.addEventListener("click", HEX3Aanonymous_3095377, false);
+        F.line = 203;
+        i_3095449 = addInt(i_3095449, 1);
+        if (!(((colontmp__3095447).length == L_3095450))) {
+        F.line = 204;
+        failedAssertImpl_2500480(makeNimstrLit("/home/dk/.choosenim/toolchains/nim-#devel/lib/system/iterators.nim(204, 11) `len(a) == L` the length of the seq changed while iterating over it"));
+        }
+        
+      }
+  } while(false);
+} while(false);
 framePtr = F.prev;
 var F={procname:"module frontend",prev:framePtr,filename:"/home/dk/Documents/Nim/staticshop/src/frontend.nim",line:0};
 framePtr = F;
