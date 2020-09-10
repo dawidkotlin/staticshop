@@ -1,9 +1,4 @@
 create table lang(
-  img varchar not null);
-
-create table langName(
-  describing integer not null references lang(rowid),
-  described integer not null references lang(rowid),
   name varchar not null);
 
 create table user(
@@ -37,11 +32,6 @@ create table productName(
   lang integer not null references lang(rowid),
   nameId integer not null references productNameImpl(rowid));
 
-create table productDesc(
-  product integer not null references product(rowid),
-  lang integer not null references lang(rowid),
-  desc varchar not null);
-
 create table purchase(
   user integer not null references user(rowid),
   product integer not null references product(rowid));
@@ -49,3 +39,8 @@ create table purchase(
 create table cartItem(
   product integer not null references product(rowid),
   user integer not null references user(rowid));
+
+create table translation(
+  langId integer not null references lang(rowid),
+  phrase varchar not null,
+  translated varchar not null)

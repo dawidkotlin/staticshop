@@ -1,4 +1,7 @@
-import server, asyncdispatch, httpcore, database, strutils, htmlrender, sugar, db_sqlite, strutils, uri, oids, bcrypt, os
+import server, asyncdispatch, httpcore, database, strutils, htmlrender, sugar, db_sqlite, uri, oids, bcrypt, os, macros
+
+proc translated(vars: ReqVars, phrase: string): string =
+  result = db.getValue(sql"select translated from translation where phrase = ? and langId = ?", phrase, vars.langId)
 
 template modal(modalId: string, body): untyped =
   render:
@@ -10,7 +13,7 @@ template modal(modalId: string, body): untyped =
       button(class="modal-close is-large", "aria-label"="close")
 
 const
-  frontendJsSource = staticRead "../frontend.js"
+  frontendJsSource = staticRead getCurrentDir()/"bin"/"frontend.js"
 
 template renderPage*(vars: ReqVars, dslBody) =
   var cartCount, cartPrice: string
@@ -20,7 +23,7 @@ template renderPage*(vars: ReqVars, dslBody) =
     from cartItem
     join product on product.rowid = product
     where user = ?""", vars.userId)
-    .unpackTo cartCount, cartPrice
+    .unpack cartCount, cartPrice
 
   vars.respBody = render:
     "<!doctype html>"
@@ -35,37 +38,43 @@ template renderPage*(vars: ReqVars, dslBody) =
       body:
         modal "signupModal":
           form(action="/signup", `method`="post"):
-            
             tdiv(class="field"):
-              label(class="label"): "Email"
+              label(class="label"):
+                vars.translated("email").capitalizeAscii()
               tdiv(class="control"):
                 input(class="input", `type`="email", name="email")
 
             tdiv(class="field"):
-              label(class="label"): "Password"
+              label(class="label"):
+                vars.translated("password").capitalizeAscii()
               tdiv(class="control"):
                 input(class="input", `type`="password", name="password", minLength="8")
             
             tdiv(class="field"):
-              label(class="label"): "Confirm password"
+              label(class="label"):
+                vars.translated("confirm password").capitalizeAscii()
               tdiv(class="control"):
-                input(class="input", `type`="password", name="confirmPassword", minLength="8")
+                input(class="input", `type`="confirm password", name="confirmPassword", minLength="8")
             
-            button(class="button is-primary"): strong"Sign up"
+            button(class="button is-primary"):
+              strong vars.translated("sign up")
         
         modal "loginModal":
           form(action="/login", `method`="post"):
             tdiv(class="field"):
-              label(class="label"): "Email"
+              label(class="label"):
+                vars.translated("email").capitalizeAscii()
               tdiv(class="control"):
                 input(class="input", `type`="email", name="email")
 
             tdiv(class="field"):
-              label(class="label"): "Password"
+              label(class="label"):
+                vars.translated("password").capitalizeAscii()
               tdiv(class="control"):
                 input(class="input", `type`="password", name="password", minLength="8")
 
-            button(class="button is-primary"): strong"Log in"
+            button(class="button is-primary"):
+              strong vars.translated("log in").capitalizeAscii()
 
         nav(class="navbar is-fixed-top", role="navigation", "aria-label"="main navigation"):
           tdiv(class="navbar-brand"):
@@ -78,6 +87,32 @@ template renderPage*(vars: ReqVars, dslBody) =
               span("aria-hidden"="true")
           
           tdiv(class="navbar-menu"):
+            tdiv(class="navbar-start"):
+              tdiv(class="navbar-item"):
+                tdiv(class="field is-grouped"):
+                  tdiv(class="control"):
+                    tdiv(class="dropdown is-hoverable"):
+                      tdiv(class="navbar-trigger"):
+                        button(class="button", "aria-haspopup"="true", "aria-controls"="dropdown-menu"):
+                          span db
+                            .getValue(sql"select name from lang where rowid = ?", vars.langId)
+                            .capitalizeAscii()
+                          
+                          span(class="icon is-small"):
+                            italic(class="fas fa-angle-down", "aria-hidden"="true")
+                      
+                      tdiv(class="dropdown-menu", id="dropdown-menu", role="menu"):
+                        tdiv(class="dropdown-content"):
+                          for it in db.fastRows(sql"select rowid, name from lang", vars.langId):
+                            var langId, langName: string
+                            it.unpack langId, langName
+                            
+                            form(action="/changeLang", `method`="post"):
+                              input(`type`="hidden", name="langId", value=langId)
+                              
+                              a(class="dropdown-item", onClick="parentNode.submit()"):
+                                langName.capitalizeAscii()
+
             tdiv(class="navbar-end"):
               tdiv(class="navbar-item"):
                 tdiv(class="field is-grouped"):
@@ -88,8 +123,7 @@ template renderPage*(vars: ReqVars, dslBody) =
                       select count(*), sum(price)
                       from cartItem
                       join product on product.rowid = product
-                      where user = ?""", vars.userId)
-                      .unpackTo cartCount, cartPrice
+                      where user = ?""", vars.userId).unpack cartCount, cartPrice
 
                     if cartCount != "0":
                       tdiv(class="control"):
@@ -115,11 +149,11 @@ template renderPage*(vars: ReqVars, dslBody) =
                   else:
                       tdiv(class="control"):
                         button(class="button is-primary", id="showSignupModal"):
-                          strong"Sign up"
+                          strong vars.translated("sign up").capitalizeAscii()
 
                       tdiv(class="control"):  
                         button(class="button is-light", id="showLoginModal"):
-                          "Log in"
+                          vars.translated("log in").capitalizeAscii()
 
         section(class="section"):
           tdiv(class="container"):
@@ -139,12 +173,9 @@ template renderPage*(vars: ReqVars, dslBody) =
               a(href="https://bulma.io/"): "Bulma"
               " by "
               a(href="#"): "Dawid Kotliński"
-            p:
-              "Source code licensed "
+              ". The source code licensed "
               a(href="https://opensource.org/licenses/mit-license.php"): "MIT"
-              "."
-            p:
-              "Website content licensed "
+              ". The website content licensed "
               a(href="https://creativecommons.org/licenses/by-nc-sa/4.0/"): "CC BY-NC-SA 4.0"
               "."
         
@@ -155,52 +186,52 @@ addRoute HttpGet, "/", proc(vars: var ReqVars) =
   vars.code = Http303
 
 addRoute HttpGet, "/search", proc(vars: var ReqVars) =
-  var allCategoryNames, allCategoryRowids: seq[string]
+  var catNames, catIds: seq[string]
   
-  for it in db.fastRows(sql"select rowid, name from categoryName where lang = ?", vars.langRowid):
-    allCategoryRowids.add it[0]
-    allCategoryNames.add it[1]
+  for it in db.fastRows(sql"select rowid, name from categoryName where lang = ?", vars.langId):
+    catIds.add it[0]
+    catNames.add it[1]
   
-  var searchedCategoryRowids, searchedCategoryNames: seq[string]
-  for it in vars.params("categoryRowid"):
+  var searchedCatIds, searchedCatNames: seq[string]
   
-    let name = db.getValue(sql"select name from categoryName where rowid = ?", it)
-    assert name != "", it
-    if name != "":
-      searchedCategoryRowids.add it
-      searchedCategoryNames.add name
+  for catId in vars.params("categoryRowid"):
+    let catName = db.getValue(sql"select name from categoryName where rowid = ?", catId)
+    assert catName != "", catId
+    if catName != "":
+      searchedCatIds.add catId
+      searchedCatNames.add catName
   
   var moviesQuery = """
     select
-      product.rowid, price, premiere, productNameImpl.name, desc, categoryName.name, cartItem.rowid, purchase.rowid
+      product.rowid, price, premiere, productNameImpl.name, categoryName.name, cartItem.rowid, purchase.rowid
     from
       product
       join productName on productName.product = product.rowid
-      join productDesc on productDesc.product = product.rowid
       join categoryName on categoryName.category = product.category
       join productNameImpl on productNameImpl.rowid = productName.nameId
       left join cartItem on cartItem.product = product.rowid and cartItem.user = ?
       left join purchase on purchase.product = product.rowid and purchase.user = ?
     where
       productName.lang = ? and
-      productDesc.lang = ? and
       categoryName.lang = ? and
-      (? == 'false' or purchase.rowid is null) and
-      (? == 'false' or cartItem.rowid is not null)
+      (? like 'exclude' and purchase.rowid is null or ? like 'require' and purchase.rowid is not null or ? = '') and
+      (? like 'exclude' and cartItem.rowid is null or ? like 'require' and cartItem.rowid is not null or ? = '')
   """
- 
   
-  let hidePurchased = vars.hasParam("hidePurchased")
-  let hideNonCart = vars.hasParam("hideNonCart")
+  let purchasedItems = vars.param("purchasedItems")
+  let cartItems = vars.param("cartItems")
   
   var moviesQueryArgs = @[
     vars.userId,
     vars.userId,
-    vars.langRowid,
-    vars.langRowid,
-    vars.langRowid,
-    $hidePurchased,
-    $hideNonCart]
+    vars.langId,
+    vars.langId,
+    purchasedItems,
+    purchasedItems,
+    purchasedItems,
+    cartItems,
+    cartItems,
+    cartItems]
 
   let searchedName = vars.param("searchedName")
 
@@ -208,16 +239,16 @@ addRoute HttpGet, "/search", proc(vars: var ReqVars) =
     moviesQuery.add " and productNameImpl match ?"
     moviesQueryArgs.add searchedName
 
-  if searchedCategoryRowids != @[]:
-    moviesQuery.add " and product.rowid in (" & repeat("?,", searchedCategoryRowids.len - 1) & "?)"
-    moviesQueryArgs.add searchedCategoryRowids
+  if searchedCatIds != @[]:
+    moviesQuery.add " and product.rowid in (" & repeat("?,", searchedCatIds.len - 1) & "?)"
+    moviesQueryArgs.add searchedCatIds
   
   type SortingKind = enum
-    skRelevantName = "Most relevant name"
-    skRecent = "Most recent first"
-    skOld = "Oldest first"
-    skExpensive = "Most expensive first"
-    skCheap = "Cheapest first"
+    skRelevantName = "most relevant name"
+    skRecent = "most recent"
+    skOld = "oldest"
+    skExpensive = "most expensive"
+    skCheap = "cheapest"
 
   # moviesQuery.add " order by purchase.rowid nulls first" # , cartItem.rowid nulls last
   
@@ -225,7 +256,7 @@ addRoute HttpGet, "/search", proc(vars: var ReqVars) =
     if searchedName != "":
       skRelevantName
     else:
-      let sorting = vars.param("sortingKind").decodeUrl().parseEnum(default=skRecent)
+      let sorting = vars.param("sortingKind").decodeUrl().parseEnum(skRecent)
       if sorting == skRelevantName:
         skRecent
       else:
@@ -243,83 +274,95 @@ addRoute HttpGet, "/search", proc(vars: var ReqVars) =
       tdiv(class="column is-one-quarter"):
         form(action="/search"):
           tdiv(class="field"):
-            label(class="label"): "Name"
+            label(class="label"): vars.translated("name").capitalizeAscii()
             tdiv(class="control"):
               input(class="input", `type`="text", name="searchedName", value=searchedName)
           
           tdiv(class="field"):
-            label(class="label"): "Sorting"
+            label(class="label"):
+              vars.translated("sorting").capitalizeAscii()
+            
             tdiv(class="control"):
               tdiv(class="select"):
                 select(name="sortingKind"):
                   for it in SortingKind:
-                    if it == sortingKind:
-                      option(value = $it, selected="selected"): $it
-                    else:
-                      option(value = $it): $it
+                    if not (it == skRelevantName and searchedName == ""):
+                      option(value = $it, selected ?= it == sortingKind):
+                        vars.translated($it).capitalizeAscii()
 
           # for it in db.fastRows(sql"""select category.rowid, name
           #                             from category
           #                             join categoryName on categoryName.category = category.rowid
           #                             where lang = ?""", vars.langRowid):
           #   var id, name: string
-          #   it.unpackTo id, name
+          #   it.unpack id, name
             
-          #   tdiv(class"field"):
-          #     label(class="label"): "Sci-fi"
+          #   tdiv(class="field"):
+          #     label(class="label"): name
           #     tdiv(class="control"):
           #       tdiv(class="select"):
-          #         select(name=name):
-          #           option(value="")
+          #         select(name="catId:"&id):
+          #           option(class="has-text-light", value="default"): "Show"
+          #           option(class="has-text-green", value="require"): "Require"
+          #           option(class="has-text-red", value="exclude"): "Exclude"
 
           tdiv(class="field"):
-            label(class="label"): "Categories"
+            label(class="label"):
+              vars.translated("categories").capitalizeAscii()
+            
             tdiv(class="control"):
-              for it in db.fastRows(sql"""
-                  select category.rowid, name
-                  from category
-                  join categoryName on categoryName.category = category.rowid
-                  where lang = ?""", vars.langRowid):
-              
+              for it in db.fastRows(sql"""select category.rowid, name
+                                          from category
+                                          join categoryName on categoryName.category = category.rowid
+                                          where lang = ?""", vars.langId):
                 var catRowid, catName: string
-                it.unpackTo catRowid, catName 
+                it.unpack catRowid, catName 
                 
                 tdiv:
                   label(class="checkbox"):
-                    if catRowid in searchedCategoryRowids:
-                      input(`type`="checkbox", name="categoryRowid", value=catRowid, checked="checked"):
-                        " "
-                        catName.capitalizeAscii()
-                    else:
-                      input(`type`="checkbox", name="categoryRowid", value=catRowid):
-                        " "
-                        catName.capitalizeAscii()
-              
+                    input(`type`="checkbox", name="categoryRowid", value=catRowid, checked ?= catRowid in searchedCatIds):
+                      " "
+                      catName.capitalizeAscii()
+
           tdiv(class="field"):
-            label(class="label"): "Other filters"
+            label(class="label"):
+              vars.translated("purchased items").capitalizeAscii()
+            
             tdiv(class="control"):
-              tdiv:
-                label(class="checkbox"):
-                  if hidePurchased:
-                    input(`type`="checkbox", name="hidePurchased", checked="checked"):
-                      " Hide purchased"
-                  else:
-                    input(`type`="checkbox", name="hidePurchased"):
-                      " Hide purchased"
-              
-              tdiv:
-                label(class="checkbox"):
-                  if hideNonCart:
-                    input(`type`="checkbox", name="hideNonCart", checked="checked"):
-                      " Only cart"
-                  else:
-                    input(`type`="checkbox", name="hideNonCart"):
-                      " Only cart"
+              tdiv(class="select"):
+                select(name="purchasedItems"):
+                  option(value="", selected ?= purchasedItems == ""): vars.translated("included").capitalizeAscii()
+                  option(value="require", selected ?= purchasedItems == "require"): vars.translated("required").capitalizeAscii()
+                  option(value="exclude", selected ?= purchasedItems == "exclude"): vars.translated("excluded").capitalizeAscii()
+
+          tdiv(class="field"):
+            label(class="label"):
+              vars.translated("cart items").capitalizeAscii()
+            
+            tdiv(class="control"):
+              tdiv(class="select"):
+                select(name="cartItems"):
+                  option(value="", selected ?= cartItems == ""): vars.translated("included").capitalizeAscii()
+                  option(value="require", selected ?= cartItems == "require"): vars.translated("required").capitalizeAscii()
+                  option(value="exclude", selected ?= cartItems == "exclude"): vars.translated("excluded").capitalizeAscii()
+
+          # tdiv(class="field"):
+          #   label(class="label"): "Other filters"
+          #   tdiv(class="control"):
+          #     tdiv:
+          #       label(class="checkbox"):
+          #         input(`type`="checkbox", name="hidePurchased", checked ?= hidePurchased):
+          #           " Hide purchased"
+          #     tdiv:
+          #       label(class="checkbox"):
+          #         input(`type`="checkbox", name="hideNonCart", checked ?= hideNonCart):
+          #           " Only cart"
           
-          button(class="button is-link"): "Search"
+          button(class="button is-link"):
+            vars.translated("search").capitalizeAscii()
 
       tdiv(class="column"):
-        if searchedName != "" or searchedCategoryNames != @[]:
+        if searchedName != "" or searchedCatNames != @[]:
           p(class="subtitle"):
             "Searching"
             
@@ -327,74 +370,82 @@ addRoute HttpGet, "/search", proc(vars: var ReqVars) =
               " for "
               strong searchedName
             
-            if searchedCategoryNames != @[]:
+            if searchedCatNames != @[]:
               " in "
               
-              for i in 0 ..< searchedCategoryNames.high:
-                strong searchedCategoryNames[i]
+              for i in 0 ..< searchedCatNames.high:
+                strong searchedCatNames[i]
                 ", "
               
-              strong searchedCategoryNames[^1] 
+              strong searchedCatNames[^1] 
         
-        table(class="table is-fullwidth"):
-          thead:
-            tr:
-              th"Name"
-              th"Category"
-              th"Price"
-              th"Premiere"
-              
-              if vars.userId != "":
-                th"Cart"
-          
-          tbody:
-            for it in db.fastRows(sql(moviesQuery), moviesQueryArgs):
-              var rowid, price, premiere, name, desc, categoryName, cartItemId, purchaseId: string
-              it.unpackTo rowid, price, premiere, name, desc, categoryName, cartItemId, purchaseId
-              price = price.insertSep(' ') & " zł"
+        if db.getValue(sql("select exists(" & moviesQuery & ")"), moviesQueryArgs) == "0":
+          section(class="hero"):
+            tdiv(class="hero-body"):
+              tdiv(class="container"):
+                h1(class="title"):
+                  "No items match your query"
 
+        else:
+          table(class="table is-fullwidth"):
+            thead:
               tr:
-                td:
-                  if sortingKind == skRelevantName:
-                    strong name
-                  else:
-                    name
-                
-                td categoryName.capitalizeAscii()
-                
-                td:
-                  if sortingKind in {skCheap, skExpensive}:
-                    strong price
-                  else:
-                    price
-
-                td:
-                  if sortingKind in {skOld, skRecent}:
-                    strong premiere
-                  else:
-                    premiere
+                th vars.translated("name").capitalizeAscii()
+                th vars.translated("category").capitalizeAscii()
+                th vars.translated("price").capitalizeAscii()
+                th vars.translated("premiere").capitalizeAscii()
                 
                 if vars.userId != "":
+                  th vars.translated("cart").capitalizeAscii()
+            
+            tbody:
+              for it in db.fastRows(sql(moviesQuery), moviesQueryArgs):
+                var rowid, price, premiere, name, categoryName, cartItemId, purchaseId: string
+                it.unpack rowid, price, premiere, name, categoryName, cartItemId, purchaseId
+                price = price.insertSep(' ') & ' ' & vars.translated("PLN")
+
+                tr:
                   td:
-                    if purchaseId == "":
-                      form(action="/addOrRemoveCartItem", `method`="post"):
-                        input(`type`="hidden", name="productId", value=rowid)
-                        
-                        if cartItemId == "":
-                          button(class="button is-small is-success"):
-                            "Add"
-                        else:
-                          button(class="button is-danger is-small"):
-                            "Remove"
-                    
+                    if sortingKind == skRelevantName:
+                      strong name
                     else:
-                      button(class="button is-static is-small"):
-                        "Purchased"
+                      name
+                  
+                  td:
+                    categoryName.capitalizeAscii()
+                  
+                  td:
+                    if sortingKind in {skCheap, skExpensive}:
+                      strong price
+                    else:
+                      price
+
+                  td:
+                    if sortingKind in {skOld, skRecent}:
+                      strong premiere
+                    else:
+                      premiere
+                  
+                  if vars.userId != "":
+                    td:
+                      if purchaseId == "":
+                        form(action="/addOrRemoveCartItem", `method`="post"):
+                          input(`type`="hidden", name="productId", value=rowid)
+                          
+                          if cartItemId == "":
+                            button(class="button is-small is-success"):
+                              "Add"
+                          else:
+                            button(class="button is-danger is-small"):
+                              "Remove"
+                      
+                      else:
+                        button(class="button is-static is-small"):
+                          "Purchased"
 
 addRoute HttpGet, "/item", proc(vars: var ReqVars) =
   vars.addHeader "location", vars.prevGetPath
   vars.code = Http303
-  
 
 addRoute HttpPost, "/signup", proc(vars: var ReqVars) =
   vars.addHeader "location", vars.prevGetPath
@@ -420,7 +471,7 @@ addRoute HttpPost, "/login", proc(vars: var ReqVars) =
   var userId, passHash, passSalt: string
   
   db.getRow(sql"select rowid, passHash, passSalt from user where email = ?", email)
-    .unpackTo userId, passHash, passSalt
+    .unpack userId, passHash, passSalt
   
   if passHash == "" or passSalt == "":
     vars.notif = "Invalid email"
@@ -455,7 +506,7 @@ addRoute HttpPost, "/addOrRemoveCartItem", proc(vars: var ReqVars) =
       from productName
       join productNameImpl on productNameImpl.rowid = productName.nameId
       where product = ?
-      limit 1""", prodId, vars.userId, prodId).unpackTo name, inCart
+      limit 1""", prodId, vars.userId, prodId).unpack name, inCart
 
     if inCart == "1":
       vars.notif = "Removed <strong>" & name & "</strong>"
@@ -487,6 +538,11 @@ addRoute HttpPost, "/removeAllCartItems", proc(vars: var ReqVars) =
     db.exec sql"delete from cartItem where user = ?", vars.userId
     vars.notif = "Removed all cart items"
 
-echo "[ Running staticshop server... ]"
+addRoute HttpPost, "/changeLang", proc(vars: var ReqVars) =
+  vars.addHeader "location", vars.prevGetPath
+  vars.code = Http303
+  vars.langId = vars.param("langId")
+
+echo "The server has started"
 asyncCheck serve()
 runForever()

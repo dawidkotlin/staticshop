@@ -3,15 +3,11 @@ import sugar, sequtils
 
 type
   ReqVars* = object
-    # session*: tuple[notif, notifKind, prevGetPath: string]
-    
-    ## session vars
-    notif*, notifKind*, prevGetPath*: string
-    
+    notif*, notifKind*, prevGetPath*, langId*: string
     ## request vars
     code*: HttpCode
     params: Table[string, seq[string]]
-    respHeaders, respBody*, userId*, userEmail*, langRowid*, sessionId*, pathWithQuery: string
+    respHeaders, respBody*, userId*, userEmail*, sessionId*, pathWithQuery: string
   
   NodeCb = proc(reqVars: var ReqVars) {.nimcall.}
   
@@ -90,18 +86,16 @@ proc serve(client: AsyncSocket) {.async.} =
     while true:
       var meth: HttpMethod
       var reqHeaders: Table[string, seq[string]]
-      var vars: ReqVars
-      vars.langRowid = "2" ## en
-      vars.code = Http404
+      var vars = ReqVars(code: Http404)
+
+      if db.getValue(sql"select exists(select * from lang where rowid = ?)", vars.langId) == "0":
+        vars.langId = "2" ## english?
 
       block outer:
         ## parse the first row
         
         let row = await client.recvLine()
-        
-        if row == "":
-          break mainLoop
-        
+        if row == "": break mainLoop
         var rowi = 0
         var methodStr: string
         rowi += row.parseUntil(methodStr, Whitespace, rowi) + 1
@@ -137,12 +131,8 @@ proc serve(client: AsyncSocket) {.async.} =
         
         while true:
           let row = await client.recvLine()
-          
-          if row == "":
-            break mainLoop
-          
-          if row == "\c\L":
-            break
+          if row == "": break mainLoop
+          if row == "\c\L": break
           
           var key: string
           var i = 0
@@ -217,13 +207,14 @@ proc serve(client: AsyncSocket) {.async.} =
           if sessionKeyCookie in cookies:
             var packedSession, userId: string
             let row = db.getRow(sql"select rowid, data, user from session where key = ?", cookies[sessionKeyCookie])
-            row.unpackTo vars.sessionId, packedSession, userId
+            row.unpack vars.sessionId, packedSession, userId
 
             if vars.sessionId != "":
               var i = 0
               inc i, packedSession.parseUntil(vars.notif, '\1', i) + 1
               inc i, packedSession.parseUntil(vars.notifKind, '\1', i) + 1
               inc i, packedSession.parseUntil(vars.prevGetPath, '\1', i) + 1
+              inc i, packedSession.parseUntil(vars.langId, '\1', i) + 1
 
               if vars.prevGetPath == "":
                 vars.prevGetPath = "/"
@@ -268,7 +259,7 @@ proc serve(client: AsyncSocket) {.async.} =
                 vars.notif = ""
                 vars.notifKind = ""
                 vars.prevGetPath = vars.pathWithQuery
-              
+
               break outer
         
         ## find file
@@ -290,7 +281,11 @@ proc serve(client: AsyncSocket) {.async.} =
         vars.addHeader "Content-Type", "text/html"
         vars.respBody = $vars.code
 
-      let sessionVars = vars.notif & '\1' & vars.notifKind & '\1' & vars.prevGetPath
+      let sessionVars =
+        vars.notif & '\1' &
+        vars.notifKind & '\1' &
+        vars.prevGetPath & '\1' &
+        vars.langId
       
       db.exec sql"update session set data = ? where rowid = ?", sessionVars, vars.sessionId
       

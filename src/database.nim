@@ -3,7 +3,7 @@ import db_sqlite, macros
 let
   db* = db_sqlite.open(connection="resources/data.db", user="", password="", database="")
 
-macro unpackTo*(row: seq[string], vars: varargs[untyped]) =
+macro unpack*(row: seq[string], vars: varargs[untyped]) =
   template asgn(thisVar, row, i) =
     thisVar = if i <= row.high: row[i] else: ""
   

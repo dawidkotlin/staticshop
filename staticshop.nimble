@@ -3,6 +3,7 @@ author = "Dawid Kotliński"
 description = "A new awesome nimble package"
 license = "MIT"
 srcDir = "src"
+binDir = "bin"
 bin = @["frontend.js", "resetDb", "staticshop"]
 
 requires "nim 1.3.5", "bcrypt 0.2.1"

@@ -28,28 +28,43 @@ macro render*(body): string =
       let tag = identToTag[key]
       
       if tag in unpairedTags: 
-        result = newCall("add", resultVar, newLit("</" & tag & ">"))
+        result = newCall(bindSym"add", resultVar, newLit("</" & tag & ">"))
       else:
-        result = newCall("add", resultVar, newLit("<" & tag & "></" & tag & ">"))
+        result = newCall(bindSym"add", resultVar, newLit("<" & tag & "></" & tag & ">"))
     
     elif node.kind in CallNodes and (let key = node[0].repr().toLowerAscii(); key in identToTag):
       let tag = identToTag[key]
       result = newStmtList()
-      result.add newCall("add", resultVar, newLit(&"<{tag}"))
+      result.add newCall(bindSym"add", resultVar, newLit(&"<{tag}"))
       
       for i in 1 ..< node.len:
         let it = node[i]
         
         if it.kind == nnkExprEqExpr:
-          result.add newCall("add", resultVar, newLit(&" {$it[0]}='"))
-          result.add newCall("add", resultVar, it[1])
-          result.add newCall("add", resultVar, newLit("'"))
-        else:
-          assert it == node.last
+          expectKind it[0], {nnkIdent, nnkStrLit, nnkAccQuoted, nnkSym}
+          let key = $it[0]
+          let val = it[1]
+          result.add newCall(bindSym"add", resultVar, newLit(" " & key & "=\""))
+          result.add newCall(bindSym"add", resultVar, val)
+          result.add newCall(bindSym"add", resultVar, newLit('"'))
+
+        elif it.kind == nnkInfix:
+          expectIdent it[0], "?="
+          expectKind it[1], {nnkIdent, nnkStrLit, nnkAccQuoted, nnkSym}
+          let name = $it[1]
+          let cond = it[2]
+
+          result.add:
+            newTree(nnkIfStmt,
+              newTree(nnkElifBranch, cond,
+                newCall(bindSym"add", resultVar, newLit(" " & name & "=\"" & name & '"'))))
+
+        elif it != node.last:
+          expectKind it, {nnkExprEqExpr, nnkInfix}
+
+      result.add newCall(bindSym"add", resultVar, newLit('>'))
       
-      result.add newCall("add", resultVar, newLit('>'))
-      
-      if node.last.kind != nnkExprEqExpr:
+      if node.last.kind notin {nnkExprEqExpr, nnkInfix}:
         result.add process(node.last)
       
       if tag notin unpairedTags:
