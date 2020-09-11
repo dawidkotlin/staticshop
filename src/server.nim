@@ -3,8 +3,7 @@ import sugar, sequtils
 
 type
   ReqVars* = object
-    notif*, notifKind*, prevGetPath*, langId*: string
-    ## request vars
+    session*: tuple[notif, notifKind, langId, prevGet: string]
     code*: HttpCode
     params: Table[string, seq[string]]
     respHeaders, respBody*, userId*, userEmail*, sessionId*, pathWithQuery: string
@@ -88,11 +87,8 @@ proc serve(client: AsyncSocket) {.async.} =
       var reqHeaders: Table[string, seq[string]]
       var vars = ReqVars(code: Http404)
 
-      if db.getValue(sql"select exists(select * from lang where rowid = ?)", vars.langId) == "0":
-        vars.langId = "2" ## english?
-
       block outer:
-        ## parse the first row
+        ## parse first row
         
         let row = await client.recvLine()
         if row == "": break mainLoop
@@ -127,7 +123,7 @@ proc serve(client: AsyncSocket) {.async.} =
           vars.code = Http400
           break outer
         
-        ## parse the headers
+        ## parse headers
         
         while true:
           let row = await client.recvLine()
@@ -158,7 +154,7 @@ proc serve(client: AsyncSocket) {.async.} =
           vars.code = Http411
           break outer
         
-        ## parse the body if there's any
+        ## parse body
         
         if "content-length" in reqHeaders:
           let expectedBytes =
@@ -201,9 +197,9 @@ proc serve(client: AsyncSocket) {.async.} =
                 let val = pair.substr(eq+1)
                 cookies[key] = val
         
-        ## set session vars
+        ## get (or create) session
         
-        block getSession:
+        block:
           if sessionKeyCookie in cookies:
             var packedSession, userId: string
             let row = db.getRow(sql"select rowid, data, user from session where key = ?", cookies[sessionKeyCookie])
@@ -211,13 +207,11 @@ proc serve(client: AsyncSocket) {.async.} =
 
             if vars.sessionId != "":
               var i = 0
-              inc i, packedSession.parseUntil(vars.notif, '\1', i) + 1
-              inc i, packedSession.parseUntil(vars.notifKind, '\1', i) + 1
-              inc i, packedSession.parseUntil(vars.prevGetPath, '\1', i) + 1
-              inc i, packedSession.parseUntil(vars.langId, '\1', i) + 1
+              for it in vars.session.fields:
+                inc i, packedSession.parseUntil(it, '\1', i) + 1
 
-              if vars.prevGetPath == "":
-                vars.prevGetPath = "/"
+              if vars.session.prevGet == "":
+                vars.session.prevGet = "/"
 
               if userId != "":
                 let userEmail = db.getValue(sql"select email from user where rowid = ?", userId)
@@ -227,19 +221,17 @@ proc serve(client: AsyncSocket) {.async.} =
             
             else:
               let key = $genOid()
-              vars.addHeader "Set-Cookie", sessionKeyCookie & "=" & key
-              let data = ""
-              vars.sessionId = $db.insertID(sql"insert into session(key, data) values (?, ?)", key, data)
+              vars.addHeader "Set-Cookie", (sessionKeyCookie & "=" & key)
+              vars.sessionId = $db.insertID(sql"insert into session(key, data) values (?, '')", key)
+              vars.session.langId = "2" ## english?
 
-        ## find route
+        ## try find route
         
         block findRoute:
           if roots[meth] != nil:
             var node = roots[meth]
             var pathi = path.find('/') + 1
             var token: string
-            # let i = path.rfind('?')
-            # let pathEnd = if i >= 0: i else: path.high
 
             while pathi <= path.high:
               pathi += path.parseUntil(token, '/', pathi) + 1
@@ -256,13 +248,13 @@ proc serve(client: AsyncSocket) {.async.} =
               vars.addHeader "Content-Type", "text/html"
               
               if meth == HttpGet:
-                vars.notif = ""
-                vars.notifKind = ""
-                vars.prevGetPath = vars.pathWithQuery
+                vars.session.notif = ""
+                vars.session.notifKind = ""
+                vars.session.prevGet = vars.pathWithQuery
 
               break outer
         
-        ## find file
+        ## try find file
         
         if meth == HttpGet:
           let filepath = "public" / path
@@ -281,13 +273,12 @@ proc serve(client: AsyncSocket) {.async.} =
         vars.addHeader "Content-Type", "text/html"
         vars.respBody = $vars.code
 
-      let sessionVars =
-        vars.notif & '\1' &
-        vars.notifKind & '\1' &
-        vars.prevGetPath & '\1' &
-        vars.langId
+      var sessionPacked: string
+
+      for it in vars.session.fields:
+        sessionPacked.add it & '\1'
       
-      db.exec sql"update session set data = ? where rowid = ?", sessionVars, vars.sessionId
+      db.exec sql"update session set data = ? where rowid = ?", sessionPacked, vars.sessionId
       
       let resp =
         "HTTP/1.1 " & toUpperAscii($vars.code) & "\n" &

@@ -1,8 +1,7 @@
 import macros, strtabs, strutils, strformat, sets
 
-let
-  identToTag {.compileTime.} = newStringTable(modeStyleInsensitive)
 var
+  identToTag {.compileTime.} = newStringTable(modeStyleInsensitive)
   unpairedTags {.compileTime.}: HashSet[string]
 
 static:
@@ -19,11 +18,10 @@ static:
     identToTag[it] = it
     unpairedTags.incl it
 
-macro render*(body): string =
+macro renderHtml*(body): string =
   let resultVar = genSym(nskVar)
   
   proc process(node: NimNode): NimNode =
-    
     if node.kind == nnkIdent and (let key = node.strVal.toLowerAscii(); key in identToTag):
       let tag = identToTag[key]
       

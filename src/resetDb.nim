@@ -1,10 +1,11 @@
 import os, db_sqlite, strutils, random
 
-## initialization
-
 removeFile "resources/data.db"
-
 let db = db_sqlite.open(connection="resources/data.db", user="", password="", database="")
+
+## tables
+
+echo "Creating tables..."
 const model = readFile("src/model.sql").split(";")
 
 for it in model:
@@ -13,14 +14,18 @@ for it in model:
 
 ## languages
 
+echo "Adding languages..."
+
 proc lang(name: string): string =
   result = $db.insertID(sql"insert into lang(name) values(?)", name)
 
 let
-  plLang = lang("polski")
-  enLang = lang("english")
+  plLang = lang("Polski")
+  enLang = lang("English")
 
 ## categories
+
+echo "Adding categories..."
 
 proc cat(enName, plName: string): string =
   result = $db.insertID(sql"insert into category default values")
@@ -28,16 +33,18 @@ proc cat(enName, plName: string): string =
   db.exec sql"insert into categoryName(category, lang, name) values(?, ?, ?)", result, plLang, plName
 
 let
-  scifi = cat("sci-fi", "science fiction")
-  thriller = cat("thriller", "thriller")
-  drama = cat("drama", "dramat")
-  action = cat("action", "akcja")
-  other = cat("other", "inne")
-  fantasy = cat("fantasy", "fantastyka")
-  animation = cat("animation", "animacja")
-  horror = cat("horror", "horror")
+  scifi = cat("Sci-Fi", "Science Fiction")
+  thriller = cat("Thriller", "Thriller")
+  drama = cat("Drama", "Dramat")
+  action = cat("Action", "Akcja")
+  other = cat("Other", "Inne")
+  fantasy = cat("Fantasy", "Fantastyka")
+  animation = cat("Animation", "Animacja")
+  horror = cat("Horror", "Horror")
 
 ## products
+
+echo "Adding products..."
 
 proc product(enName, plName, category, year, img: string) =
   let product = db.insertID(sql"insert into product(premiere, price, img, category) values(?, ?, ?, ?)", year, rand(30..70), img, category)
@@ -64,41 +71,76 @@ product "Taxi Driver", "Taksówkarz", drama, "1976", "https://media.timeout.com/
 product "Spirited Away", "Spirited Away: W krainie bogów", animation, "2001", "https://media.timeout.com/images/105456016/750/422/image.jpg"
 product "Night of the Living Dead", "Noc żywych trupów", horror, "1968", "https://media.timeout.com/images/105456017/750/422/image.jpg "
 product "Mad Max: Fury Road", "Mad Max: Na drodze gniewu", action, "2016", "https://media.timeout.com/images/105456032/750/422/image.jpg"
-product "Apocalypse Now", "Czas apokalipsy", "1979", drama, "https://media.timeout.com/images/105456033/750/422/image.jpg"
+product "Apocalypse Now", "Czas apokalipsy", drama, "1979", "https://media.timeout.com/images/105456033/750/422/image.jpg"
+## no images or polish titles yet!!!
+product "High School Musical", "High School Musical", drama, "2006", ""
+product "Sunday School Musical", "Sunday School Musical", drama, "2008", ""
+product "The Thin Blue Line", "Cienka niebieska linia", thriller, "1988", ""
+product "The Thin Red Line", "Cienka czerwona linia", thriller, "1998", ""
+product "White Christmas", "Białe Święta", drama, "1954", ""
+product "Black Christmas", "Czarne Święta", drama, "1974", ""
+product "Ghost World", "Świat Duchów", thriller, "2001", ""
+product "Ghost Town", "Miasto Duchów", thriller, "2008", ""
+product "Ghost Rider", "Autor widmo", thriller, "2010", ""
+product "Men in Black", "Faceci w Czerni", thriller, "1997", ""
 
 ## phrases
 ## they are only translated from english to other languages!
+
+echo "Adding phrases..."
 
 proc phrase(enPhrase, plPhrase: string) =
   db.exec sql"insert into translation(langId, phrase, translated) values(?, ?, ?)", enLang, enPhrase, enPhrase
   db.exec sql"insert into translation(langId, phrase, translated) values(?, ?, ?)", plLang, enPhrase, plPhrase
 
-phrase "sorting", "sortowanie"
-phrase "name", "nazwa"
-phrase "categories", "kategorie"
-phrase "category", "kategoria"
-phrase "purchased items", "kupione towary"
-phrase "cart items", "towary w koszyku"
-phrase "search", "szukaj"
-phrase "price", "cena"
-phrase "premiere", "premiera"
-phrase "home", "główna"
+phrase "Sorting", "Sortowanie"
+phrase "Name", "Nazwa"
+phrase "Categories", "Kategorie"
+phrase "Category", "Kategoria"
+phrase "Purchased items", "Kupione towary"
+phrase "Cart items", "Towary w koszyku"
+phrase "Search", "Szukaj"
+phrase "Price", "Cena"
+phrase "Premiere", "Premiera"
+phrase "Home", "Główna"
 phrase "PLN", "zł"
-phrase "password", "hasło"
-phrase "confirm password", "potwierdź hasło"
-phrase "email", "email"
-phrase "sign up", "załóż konto"
-phrase "log in", "zaloguj się"
-phrase "cart", "koszyk"
-phrase "included", "uwzględnione"
-phrase "excluded", "wykluczone"
-phrase "required", "wymagane"
-phrase "most recent", "najnowsze"
-phrase "most relevant name", "najbardziej pasująca nazwa"
-phrase "oldest", "najstarsze"
-phrase "most expensive", "najdroższe"
-phrase "cheapest", "najtańsze"
+phrase "Password", "Hasło"
+phrase "Confirm password", "Potwierdź hasło"
+phrase "Sign up", "Załóż konto"
+phrase "Log in", "Zaloguj"
+phrase "Cart", "Koszyk"
+phrase "Included", "Uwzględnione"
+phrase "Excluded", "Wykluczone"
+phrase "Required", "Wymagane"
+phrase "Most recent", "Najnowsze"
+phrase "Most relevant name", "Najbardziej pasująca nazwa"
+phrase "Oldest", "Najstarsze"
+phrase "Most expensive", "Najdroższe"
+phrase "Cheapest", "Najtańsze"
+# phrase "searching", "wyszukiwanie"
+# phrase "by phrase", "wyrażenia"
+# phrase "in", "w"
+phrase "Signed up successfully", "Zarejestrowano pomyślnie"
+phrase "Invalid email", "Niepoprawny email"
+phrase "Logged out from", "Wylogowano z"
+phrase "Purchase completed", "Zakup ukończony"
+phrase "Removed all cart items", "Usunięto wszystkie towary z koszyka"
+phrase "Log out from", "Wyloguj z"
+phrase "Add", "Dodaj"
+phrase "Remove", "Usuń"
+phrase "Purchased", "Zakupione"
+phrase "Added", "Dodano"
+phrase "Removed", "Usunięto"
+phrase "Remove all cart items", "Usuń wszystkie towary z koszyka"
+phrase "Buy", "Kup"
+phrase "item", "towar"
+phrase "items", "towary"
+phrase "for", "za"
+phrase "Made in", "Stworzono w"
+phrase "with", "za pomocą"
+phrase "by", "przez"
+phrase "Dawid Kotliński", "Dawida Kotlińskiego"
+phrase "The source code licensed", "Kod źródłowy licencjonowany"
+phrase "The website content licensed", "Treść strony licencjonowana"
 
-## output
-
-echo "The database has been reseted"
+echo "The database has been reset!"

@@ -1,10 +1,15 @@
 import server, asyncdispatch, httpcore, database, strutils, htmlrender, sugar, db_sqlite, uri, oids, bcrypt, os, macros
 
-proc translated(vars: ReqVars, phrase: string): string =
-  result = db.getValue(sql"select translated from translation where phrase = ? and langId = ?", phrase, vars.langId)
+## utils
+
+proc translate(vars: ReqVars, phrase: string): string =
+  result = db.getValue(sql"select translated from translation where phrase = ? and langId = ?", phrase, vars.session.langId)
+  assert result != "", $(langId: vars.session.langId, phrase: phrase)
+
+## main page
 
 template modal(modalId: string, body): untyped =
-  render:
+  renderHtml:
     tdiv(class="modal", id=modalId):
       tdiv(class="modal-background")
       tdiv(class="modal-content"):
@@ -13,11 +18,11 @@ template modal(modalId: string, body): untyped =
       button(class="modal-close is-large", "aria-label"="close")
 
 const
-  frontendJsSource = staticRead getCurrentDir()/"bin"/"frontend.js"
+  frontendJsSource = staticRead getProjectPath()/".."/"bin"/"frontend.js"
 
 template renderPage*(vars: ReqVars, dslBody) =
   var cartCount, cartPrice: string
-
+  
   db.getRow(sql"""
     select count(*), sum(price)
     from cartItem
@@ -25,7 +30,7 @@ template renderPage*(vars: ReqVars, dslBody) =
     where user = ?""", vars.userId)
     .unpack cartCount, cartPrice
 
-  vars.respBody = render:
+  vars.respBody = renderHtml:
     "<!doctype html>"
     html(class="has-navbar-fixed-top"):
       head:
@@ -39,47 +44,42 @@ template renderPage*(vars: ReqVars, dslBody) =
         modal "signupModal":
           form(action="/signup", `method`="post"):
             tdiv(class="field"):
-              label(class="label"):
-                vars.translated("email").capitalizeAscii()
+              label(class="label"): "Email"
               tdiv(class="control"):
                 input(class="input", `type`="email", name="email")
 
             tdiv(class="field"):
-              label(class="label"):
-                vars.translated("password").capitalizeAscii()
+              label(class="label"): vars.translate("Password")
               tdiv(class="control"):
                 input(class="input", `type`="password", name="password", minLength="8")
             
             tdiv(class="field"):
-              label(class="label"):
-                vars.translated("confirm password").capitalizeAscii()
+              label(class="label"): vars.translate("Confirm password")
               tdiv(class="control"):
-                input(class="input", `type`="confirm password", name="confirmPassword", minLength="8")
+                input(class="input", `type`="password", name="confirmPassword", minLength="8")
             
             button(class="button is-primary"):
-              strong vars.translated("sign up")
+              strong vars.translate("Sign up")
         
         modal "loginModal":
           form(action="/login", `method`="post"):
             tdiv(class="field"):
-              label(class="label"):
-                vars.translated("email").capitalizeAscii()
+              label(class="label"): "Email"
               tdiv(class="control"):
                 input(class="input", `type`="email", name="email")
 
             tdiv(class="field"):
-              label(class="label"):
-                vars.translated("password").capitalizeAscii()
+              label(class="label"): vars.translate("Password")
               tdiv(class="control"):
                 input(class="input", `type`="password", name="password", minLength="8")
 
             button(class="button is-primary"):
-              strong vars.translated("log in").capitalizeAscii()
+              strong vars.translate("Log in")
 
         nav(class="navbar is-fixed-top", role="navigation", "aria-label"="main navigation"):
           tdiv(class="navbar-brand"):
             a(class="navbar-item", href="/"):
-              strong "Home"
+              strong vars.translate("Home")
             
             a(role="button", class="navbar-burger burger", "aria-label"="menu", "aria-expanded"="false"):
               span("aria-hidden"="true")
@@ -95,15 +95,14 @@ template renderPage*(vars: ReqVars, dslBody) =
                       tdiv(class="navbar-trigger"):
                         button(class="button", "aria-haspopup"="true", "aria-controls"="dropdown-menu"):
                           span db
-                            .getValue(sql"select name from lang where rowid = ?", vars.langId)
-                            .capitalizeAscii()
+                            .getValue(sql"select name from lang where rowid = ?", vars.session.langId)
                           
                           span(class="icon is-small"):
                             italic(class="fas fa-angle-down", "aria-hidden"="true")
                       
                       tdiv(class="dropdown-menu", id="dropdown-menu", role="menu"):
                         tdiv(class="dropdown-content"):
-                          for it in db.fastRows(sql"select rowid, name from lang", vars.langId):
+                          for it in db.fastRows(sql"select rowid, name from lang", vars.session.langId):
                             var langId, langName: string
                             it.unpack langId, langName
                             
@@ -111,7 +110,7 @@ template renderPage*(vars: ReqVars, dslBody) =
                               input(`type`="hidden", name="langId", value=langId)
                               
                               a(class="dropdown-item", onClick="parentNode.submit()"):
-                                langName.capitalizeAscii()
+                                langName
 
             tdiv(class="navbar-end"):
               tdiv(class="navbar-item"):
@@ -129,57 +128,73 @@ template renderPage*(vars: ReqVars, dslBody) =
                       tdiv(class="control"):
                         form(action="/removeAllCartItems", `method`="post"):
                           button(class="button is-danger"):
-                            "Remove all cart items"
+                            vars.translate("Remove all cart items")
                       
                       tdiv(class="control"):
                         form(action="/buyCartItems", `method`="post"):
                           button(class="button is-success"):
-                            "Buy "
+                            vars.translate("Buy")
+                            " "
                             cartCount
-                            if cartCount == "1": " item" else: " items"
-                            " for "
+                            " "
+                            vars.translate(if cartCount == "1": "item" else: "items")
+                            " "
+                            vars.translate("for")
+                            " "
                             cartPrice.insertSep(' ')
-                            " zł"
+                            " "
+                            vars.translate("PLN")
 
                     tdiv(class="control"):
                       form(action="/logout", `method`="post"):
                         button(class="button is-light"):
-                          "Log out from " & vars.userEmail
+                          vars.translate("Log out from") & ' ' & vars.userEmail
 
                   else:
                       tdiv(class="control"):
                         button(class="button is-primary", id="showSignupModal"):
-                          strong vars.translated("sign up").capitalizeAscii()
+                          strong vars.translate("Sign up")
 
                       tdiv(class="control"):  
                         button(class="button is-light", id="showLoginModal"):
-                          vars.translated("log in").capitalizeAscii()
+                          vars.translate("Log in")
 
         section(class="section"):
           tdiv(class="container"):
-            if vars.notif != "":
-              tdiv(class="notification " & vars.notifKind):
+            if vars.session.notif != "":
+              tdiv(class="notification " & vars.session.notifKind):
                 button(class="delete")
-                vars.notif.capitalizeAscii()
+                vars.session.notif
             
             dslBody
         
         footer(class="footer"):
           tdiv(class="content has-text-centered"):
             p:
-              "Made in "
+              vars.translate("Made in")
+              " "
               a(href="https://nim-lang.org/"): "Nim"
-              " with "
+              " "
+              vars.translate("with")
+              " "
               a(href="https://bulma.io/"): "Bulma"
-              " by "
-              a(href="#"): "Dawid Kotliński"
-              ". The source code licensed "
+              " "
+              vars.translate("by")
+              " "
+              a(href="#"): vars.translate("Dawid Kotliński")
+              ". "
+              vars.translate("The source code licensed")
+              " "
               a(href="https://opensource.org/licenses/mit-license.php"): "MIT"
-              ". The website content licensed "
+              ". "
+              vars.translate("The website content licensed")
+              " "
               a(href="https://creativecommons.org/licenses/by-nc-sa/4.0/"): "CC BY-NC-SA 4.0"
               "."
         
         script frontendJsSource
+
+## get
 
 addRoute HttpGet, "/", proc(vars: var ReqVars) =
   vars.addHeader "location", "/search"
@@ -188,26 +203,28 @@ addRoute HttpGet, "/", proc(vars: var ReqVars) =
 addRoute HttpGet, "/search", proc(vars: var ReqVars) =
   var catNames, catIds: seq[string]
   
-  for it in db.fastRows(sql"select rowid, name from categoryName where lang = ?", vars.langId):
+  for it in db.fastRows(sql"select rowid, name from categoryName where lang = ?", vars.session.langId):
     catIds.add it[0]
     catNames.add it[1]
   
-  var searchedCatIds, searchedCatNames: seq[string]
+  var searchedCatIds#[, searchedCatNames]#: seq[string]
   
   for catId in vars.params("categoryRowid"):
-    let catName = db.getValue(sql"select name from categoryName where rowid = ?", catId)
-    assert catName != "", catId
-    if catName != "":
-      searchedCatIds.add catId
-      searchedCatNames.add catName
-  
+    # let catName = db.getValue(sql"select name from categoryName where category = ? and lang = ?", catId, vars.session.langId)
+    # assert catName != "", catId
+    # if catName != "":
+    #   searchedCatIds.add catId
+    #   searchedCatNames.add catName
+    searchedCatIds.add catId
+
   var moviesQuery = """
     select
       product.rowid, price, premiere, productNameImpl.name, categoryName.name, cartItem.rowid, purchase.rowid
     from
       product
       join productName on productName.product = product.rowid
-      join categoryName on categoryName.category = product.category
+      join category on category.rowid = product.category
+      join categoryName on categoryName.category = category.rowid
       join productNameImpl on productNameImpl.rowid = productName.nameId
       left join cartItem on cartItem.product = product.rowid and cartItem.user = ?
       left join purchase on purchase.product = product.rowid and purchase.user = ?
@@ -224,8 +241,8 @@ addRoute HttpGet, "/search", proc(vars: var ReqVars) =
   var moviesQueryArgs = @[
     vars.userId,
     vars.userId,
-    vars.langId,
-    vars.langId,
+    vars.session.langId,
+    vars.session.langId,
     purchasedItems,
     purchasedItems,
     purchasedItems,
@@ -240,27 +257,38 @@ addRoute HttpGet, "/search", proc(vars: var ReqVars) =
     moviesQueryArgs.add searchedName
 
   if searchedCatIds != @[]:
-    moviesQuery.add " and product.rowid in (" & repeat("?,", searchedCatIds.len - 1) & "?)"
+    moviesQuery.add " and category.rowid in (" & repeat("?,", searchedCatIds.len - 1) & "?)"
     moviesQueryArgs.add searchedCatIds
   
   type SortingKind = enum
-    skRelevantName = "most relevant name"
-    skRecent = "most recent"
-    skOld = "oldest"
-    skExpensive = "most expensive"
-    skCheap = "cheapest"
+    skRelevantName = "Most relevant name"
+    skRecent = "Most recent"
+    skOld = "Oldest"
+    skExpensive = "Most expensive"
+    skCheap = "Cheapest"
 
   # moviesQuery.add " order by purchase.rowid nulls first" # , cartItem.rowid nulls last
   
-  var sortingKind =
-    if searchedName != "":
-      skRelevantName
-    else:
-      let sorting = vars.param("sortingKind").decodeUrl().parseEnum(skRecent)
-      if sorting == skRelevantName:
-        skRecent
-      else:
-        sorting
+  let prevSearchedName = vars.param("prevSearchedName")
+  var sortingKind: SortingKind
+
+  if prevSearchedName == "" and searchedName != "":
+    sortingKind = skRelevantName
+  else:
+    sortingKind = vars.param("sortingKind").parseEnum(skRecent)
+
+    if sortingKind == skRelevantName and searchedName == "":
+      sortingKind = skRecent 
+
+  # var sortingKind =
+  #   if searchedName != "" and prevSearchedName == "":
+  #     skRelevantName
+  #   else:
+  #     let sortingKind = vars.param("sortingKind").decodeUrl().parseEnum(skRecent)
+  #     if sorting == skRelevantName and searchedName == "":
+  #       skRecent
+  #     else:
+  #       sorting
 
   case sortingKind
   of skRelevantName: moviesQuery.add "order by rank"
@@ -273,14 +301,18 @@ addRoute HttpGet, "/search", proc(vars: var ReqVars) =
     tdiv(class="columns"):
       tdiv(class="column is-one-quarter"):
         form(action="/search"):
+          input(`type`="hidden", name="prevSearchedName", value=searchedName)
+
           tdiv(class="field"):
-            label(class="label"): vars.translated("name").capitalizeAscii()
+            label(class="label"):
+              vars.translate("Name")
+            
             tdiv(class="control"):
               input(class="input", `type`="text", name="searchedName", value=searchedName)
           
           tdiv(class="field"):
             label(class="label"):
-              vars.translated("sorting").capitalizeAscii()
+              vars.translate("Sorting")
             
             tdiv(class="control"):
               tdiv(class="select"):
@@ -288,7 +320,7 @@ addRoute HttpGet, "/search", proc(vars: var ReqVars) =
                   for it in SortingKind:
                     if not (it == skRelevantName and searchedName == ""):
                       option(value = $it, selected ?= it == sortingKind):
-                        vars.translated($it).capitalizeAscii()
+                        vars.translate($it)
 
           # for it in db.fastRows(sql"""select category.rowid, name
           #                             from category
@@ -308,13 +340,13 @@ addRoute HttpGet, "/search", proc(vars: var ReqVars) =
 
           tdiv(class="field"):
             label(class="label"):
-              vars.translated("categories").capitalizeAscii()
+              vars.translate("Categories")
             
             tdiv(class="control"):
               for it in db.fastRows(sql"""select category.rowid, name
                                           from category
                                           join categoryName on categoryName.category = category.rowid
-                                          where lang = ?""", vars.langId):
+                                          where lang = ?""", vars.session.langId):
                 var catRowid, catName: string
                 it.unpack catRowid, catName 
                 
@@ -322,29 +354,29 @@ addRoute HttpGet, "/search", proc(vars: var ReqVars) =
                   label(class="checkbox"):
                     input(`type`="checkbox", name="categoryRowid", value=catRowid, checked ?= catRowid in searchedCatIds):
                       " "
-                      catName.capitalizeAscii()
+                      catName
 
           tdiv(class="field"):
             label(class="label"):
-              vars.translated("purchased items").capitalizeAscii()
+              vars.translate("Purchased items")
             
             tdiv(class="control"):
               tdiv(class="select"):
                 select(name="purchasedItems"):
-                  option(value="", selected ?= purchasedItems == ""): vars.translated("included").capitalizeAscii()
-                  option(value="require", selected ?= purchasedItems == "require"): vars.translated("required").capitalizeAscii()
-                  option(value="exclude", selected ?= purchasedItems == "exclude"): vars.translated("excluded").capitalizeAscii()
+                  option(value="", selected ?= purchasedItems == ""): vars.translate("Included")
+                  option(value="require", selected ?= purchasedItems == "require"): vars.translate("Required")
+                  option(value="exclude", selected ?= purchasedItems == "exclude"): vars.translate("Excluded")
 
           tdiv(class="field"):
             label(class="label"):
-              vars.translated("cart items").capitalizeAscii()
+              vars.translate("Cart items")
             
             tdiv(class="control"):
               tdiv(class="select"):
                 select(name="cartItems"):
-                  option(value="", selected ?= cartItems == ""): vars.translated("included").capitalizeAscii()
-                  option(value="require", selected ?= cartItems == "require"): vars.translated("required").capitalizeAscii()
-                  option(value="exclude", selected ?= cartItems == "exclude"): vars.translated("excluded").capitalizeAscii()
+                  option(value="", selected ?= cartItems == ""): vars.translate("Included")
+                  option(value="require", selected ?= cartItems == "require"): vars.translate("Required")
+                  option(value="exclude", selected ?= cartItems == "exclude"): vars.translate("Excluded")
 
           # tdiv(class="field"):
           #   label(class="label"): "Other filters"
@@ -359,25 +391,29 @@ addRoute HttpGet, "/search", proc(vars: var ReqVars) =
           #           " Only cart"
           
           button(class="button is-link"):
-            vars.translated("search").capitalizeAscii()
+            vars.translate("Search")
 
       tdiv(class="column"):
-        if searchedName != "" or searchedCatNames != @[]:
-          p(class="subtitle"):
-            "Searching"
+        # if searchedName != "" or searchedCatNames != @[]:
+        #   p(class="subtitle"):
+        #     vars.translation("searching").capitalizeAscii()
             
-            if searchedName != "":
-              " for "
-              strong searchedName
+        #     if searchedName != "":
+        #       " "
+        #       vars.translation("by phrase")
+        #       " "
+        #       strong searchedName
             
-            if searchedCatNames != @[]:
-              " in "
+        #     if searchedCatNames != @[]:
+        #       " "
+        #       vars.translation("in")
+        #       " "
               
-              for i in 0 ..< searchedCatNames.high:
-                strong searchedCatNames[i]
-                ", "
+        #       for i in 0 ..< searchedCatNames.high:
+        #         strong searchedCatNames[i]
+        #         ", "
               
-              strong searchedCatNames[^1] 
+        #       strong searchedCatNames[^1] 
         
         if db.getValue(sql("select exists(" & moviesQuery & ")"), moviesQueryArgs) == "0":
           section(class="hero"):
@@ -390,19 +426,19 @@ addRoute HttpGet, "/search", proc(vars: var ReqVars) =
           table(class="table is-fullwidth"):
             thead:
               tr:
-                th vars.translated("name").capitalizeAscii()
-                th vars.translated("category").capitalizeAscii()
-                th vars.translated("price").capitalizeAscii()
-                th vars.translated("premiere").capitalizeAscii()
+                th vars.translate("Name")
+                th vars.translate("Category")
+                th vars.translate("Price")
+                th vars.translate("Premiere")
                 
                 if vars.userId != "":
-                  th vars.translated("cart").capitalizeAscii()
+                  th vars.translate("Cart")
             
             tbody:
               for it in db.fastRows(sql(moviesQuery), moviesQueryArgs):
                 var rowid, price, premiere, name, categoryName, cartItemId, purchaseId: string
                 it.unpack rowid, price, premiere, name, categoryName, cartItemId, purchaseId
-                price = price.insertSep(' ') & ' ' & vars.translated("PLN")
+                price = price.insertSep(' ') & ' ' & vars.translate("PLN")
 
                 tr:
                   td:
@@ -412,7 +448,7 @@ addRoute HttpGet, "/search", proc(vars: var ReqVars) =
                       name
                   
                   td:
-                    categoryName.capitalizeAscii()
+                    categoryName
                   
                   td:
                     if sortingKind in {skCheap, skExpensive}:
@@ -434,38 +470,40 @@ addRoute HttpGet, "/search", proc(vars: var ReqVars) =
                           
                           if cartItemId == "":
                             button(class="button is-small is-success"):
-                              "Add"
+                              vars.translate("Add")
                           else:
                             button(class="button is-danger is-small"):
-                              "Remove"
+                              vars.translate("Remove")
                       
                       else:
                         button(class="button is-static is-small"):
-                          "Purchased"
+                          vars.translate("Purchased")
 
 addRoute HttpGet, "/item", proc(vars: var ReqVars) =
-  vars.addHeader "location", vars.prevGetPath
+  vars.addHeader "location", vars.session.prevGet
   vars.code = Http303
 
+## post
+
 addRoute HttpPost, "/signup", proc(vars: var ReqVars) =
-  vars.addHeader "location", vars.prevGetPath
+  vars.addHeader "location", vars.session.prevGet
   vars.code = Http303
   let email = vars.param("email")
 
   if db.getValue(sql"select exists(select 1 from user where email = ?)", email) == "1":
-    vars.notif = "Email <strong>" & email & "</strong> has already been taken"
-    vars.notifKind = "is-danger"
+    vars.session.notif = "Email <strong>" & email & "</strong> has already been taken"
+    vars.session.notifKind = "is-danger"
   else:
     let pass = vars.param("password")
     let salt = genSalt(10)
     let hashed = pass.hash(salt)
     let userId = db.insertID(sql"insert into user(email, passHash, passSalt) values(?, ?, ?)", email, hashed, salt)
     db.exec sql"update session set user = ? where rowid = ?", userId, vars.sessionId
-    vars.notif = "Signed up successfully"
-    vars.notifKind = "is-success"
+    vars.session.notif = vars.translate("Signed up successfully")
+    vars.session.notifKind = "is-success"
 
 addRoute HttpPost, "/login", proc(vars: var ReqVars) =
-  vars.addHeader "location", vars.prevGetPath
+  vars.addHeader "location", vars.session.prevGet
   vars.code = Http303
   let email = vars.param("email")
   var userId, passHash, passSalt: string
@@ -474,8 +512,8 @@ addRoute HttpPost, "/login", proc(vars: var ReqVars) =
     .unpack userId, passHash, passSalt
   
   if passHash == "" or passSalt == "":
-    vars.notif = "Invalid email"
-    vars.notifKind = "is-danger"
+    vars.session.notif = vars.translate("Invalid email")
+    vars.session.notifKind = "is-danger"
   
   else: 
     let pass = vars.param("password")
@@ -485,16 +523,16 @@ addRoute HttpPost, "/login", proc(vars: var ReqVars) =
       db.exec sql"update session set user = ? where rowid = ?", userId, vars.sessionId
 
 addRoute HttpPost, "/logout", proc(vars: var ReqVars) =
-  vars.addHeader "location", vars.prevGetPath
+  vars.addHeader "location", vars.session.prevGet
   vars.code = Http303
 
   if vars.userId != "":
     db.exec sql"update session set user = NULL where rowid = ?", vars.userId
-    vars.notif = "Logged out from " & vars.userEmail
-    vars.notifKind = "is-info"
+    vars.session.notif = vars.translate("Logged out from") & ' ' & vars.userEmail
+    vars.session.notifKind = "is-info"
 
 addRoute HttpPost, "/addOrRemoveCartItem", proc(vars: var ReqVars) =
-  vars.addHeader "location", vars.prevGetPath
+  vars.addHeader "location", vars.session.prevGet
   vars.code = Http303
   let prodId = vars.param("productId")
   
@@ -509,14 +547,14 @@ addRoute HttpPost, "/addOrRemoveCartItem", proc(vars: var ReqVars) =
       limit 1""", prodId, vars.userId, prodId).unpack name, inCart
 
     if inCart == "1":
-      vars.notif = "Removed <strong>" & name & "</strong>"
+      vars.session.notif = vars.translate("Removed") & " <strong>" & name & "</strong>"
       db.exec sql"delete from cartItem where product = ? and user = ?", prodId, vars.userId
     else:
-      vars.notif = "Added <strong>" & name & "</strong>"
+      vars.session.notif = vars.translate("Added") & " <strong>" & name & "</strong>"
       db.exec sql"insert into cartItem(product, user) values(?, ?)", prodId, vars.userId
 
 addRoute HttpPost, "/buyCartItems", proc(vars: var ReqVars) =
-  vars.addHeader "location", vars.prevGetPath
+  vars.addHeader "location", vars.session.prevGet
   vars.code = Http303
 
   if vars.userId != "" and db.getValue(sql"select count(*) from cartItem where user = ?", vars.userId) != "0":
@@ -527,22 +565,24 @@ addRoute HttpPost, "/buyCartItems", proc(vars: var ReqVars) =
       where user = ?""", vars.userId
 
     db.exec sql"delete from cartItem where user = ?", vars.userId
-    vars.notif = "Purchase completed"
-    vars.notifKind = "is-success"
+    vars.session.notif = vars.translate("Purchase completed")
+    vars.session.notifKind = "is-success"
 
 addRoute HttpPost, "/removeAllCartItems", proc(vars: var ReqVars) =
-  vars.addHeader "location", vars.prevGetPath
+  vars.addHeader "location", vars.session.prevGet
   vars.code = Http303
 
   if vars.userId != "":
     db.exec sql"delete from cartItem where user = ?", vars.userId
-    vars.notif = "Removed all cart items"
+    vars.session.notif = vars.translate("Removed all cart items")
 
 addRoute HttpPost, "/changeLang", proc(vars: var ReqVars) =
-  vars.addHeader "location", vars.prevGetPath
+  vars.addHeader "location", vars.session.prevGet
   vars.code = Http303
-  vars.langId = vars.param("langId")
+  vars.session.langId = vars.param("langId")
 
-echo "The server has started"
+## init
+
+echo "The server has started..."
 asyncCheck serve()
 runForever()
