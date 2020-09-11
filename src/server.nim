@@ -223,7 +223,9 @@ proc serve(client: AsyncSocket) {.async.} =
               let key = $genOid()
               vars.addHeader "Set-Cookie", (sessionKeyCookie & "=" & key)
               vars.sessionId = $db.insertID(sql"insert into session(key, data) values (?, '')", key)
-              vars.session.langId = "2" ## english?
+        
+        if vars.session.langId == "":
+          vars.session.langId = "2" ## english?
 
         ## try find route
         

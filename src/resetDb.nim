@@ -1,7 +1,7 @@
 import os, db_sqlite, strutils, random
 
-removeFile "resources/data.db"
-let db = db_sqlite.open(connection="resources/data.db", user="", password="", database="")
+removeFile "private/data.db"
+let db = db_sqlite.open(connection="private/data.db", user="", password="", database="")
 
 ## tables
 

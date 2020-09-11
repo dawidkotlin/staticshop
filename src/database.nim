@@ -1,7 +1,7 @@
 import db_sqlite, macros
 
 let
-  db* = db_sqlite.open(connection="resources/data.db", user="", password="", database="")
+  db* = db_sqlite.open(connection="private/data.db", user="", password="", database="")
 
 macro unpack*(row: seq[string], vars: varargs[untyped]) =
   template asgn(thisVar, row, i) =
