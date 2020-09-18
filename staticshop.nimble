@@ -4,6 +4,6 @@ description = "A new awesome nimble package"
 license = "MIT"
 srcDir = "src"
 binDir = "bin"
-bin = @["frontend.js", "resetDb", "staticshop"]
+bin = @["frontend.js", "resetDb", "backend"]
 
-requires "nim 1.3.5", "bcrypt 0.2.1"
+requires "nim 1.2.6", "bcrypt 0.2.1"

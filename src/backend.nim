@@ -22,14 +22,12 @@ const
 
 template renderPage*(vars: ReqVars, dslBody) =
   var cartCount, cartPrice: string
-  
   db.getRow(sql"""
     select count(*), sum(price)
     from cartItem
     join product on product.rowid = product
     where user = ?""", vars.userId)
     .unpack cartCount, cartPrice
-
   vars.respBody = renderHtml:
     "<!doctype html>"
     html(class="has-navbar-fixed-top"):
@@ -39,7 +37,6 @@ template renderPage*(vars: ReqVars, dslBody) =
         title "staticshop"
         link(rel="stylesheet", href="https://cdn.jsdelivr.net/npm/bulma@0.9.0/css/bulma.min.css")
         link(rel="stylesheet", href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.14.0/css/all.min.css")
-      
       body:
         modal "signupModal":
           form(action="/signup", `method`="post"):
@@ -47,17 +44,14 @@ template renderPage*(vars: ReqVars, dslBody) =
               label(class="label"): "Email"
               tdiv(class="control"):
                 input(class="input", `type`="email", name="email")
-
             tdiv(class="field"):
               label(class="label"): vars.translate("Password")
               tdiv(class="control"):
                 input(class="input", `type`="password", name="password", minLength="8")
-            
             tdiv(class="field"):
               label(class="label"): vars.translate("Confirm password")
               tdiv(class="control"):
                 input(class="input", `type`="password", name="confirmPassword", minLength="8")
-            
             button(class="button is-primary"):
               strong vars.translate("Sign up")
         
@@ -106,11 +100,9 @@ template renderPage*(vars: ReqVars, dslBody) =
                             var langId, langName: string
                             it.unpack langId, langName
                             
-                            form(action="/changeLang", `method`="post"):
+                            form(action="/changeLang", `method`="POST"):
                               input(`type`="hidden", name="langId", value=langId)
-                              
-                              a(class="dropdown-item", onClick="parentNode.submit()"):
-                                langName
+                              a(class="dropdown-item", onClick="parentNode.submit()"): langName
 
             tdiv(class="navbar-end"):
               tdiv(class="navbar-item"):
@@ -161,10 +153,10 @@ template renderPage*(vars: ReqVars, dslBody) =
 
         section(class="section"):
           tdiv(class="container"):
-            if vars.session.notif != "":
-              tdiv(class="notification " & vars.session.notifKind):
+            if vars.session.notification != "":
+              tdiv(class="notification " & vars.session.notificationKind):
                 button(class="delete")
-                vars.session.notif
+                vars.session.notification
             
             dslBody
         
@@ -198,7 +190,7 @@ template renderPage*(vars: ReqVars, dslBody) =
 
 addRoute HttpGet, "/", proc(vars: var ReqVars) =
   vars.addHeader "location", "/search"
-  vars.code = Http303
+  vars.respCode = Http303
 
 addRoute HttpGet, "/search", proc(vars: var ReqVars) =
   var catNames, catIds: seq[string]
@@ -422,6 +414,15 @@ addRoute HttpGet, "/search", proc(vars: var ReqVars) =
                 h1(class="title"):
                   "No items match your query"
 
+        # elif true:
+        #   tdiv(class="columns"):
+        #     for it in db.fastRows(sql(moviesQuery), moviesQueryArgs):
+        #       var rowid, price, premiere, name, categoryName, cartItemId, purchaseId: string
+        #       it.unpack rowid, price, premiere, name, categoryName, cartItemId, purchaseId
+        #       price = price.insertSep(' ') & ' ' & vars.translate("PLN")
+        #       tdiv(class="box"):
+
+
         else:
           table(class="table is-fullwidth"):
             thead:
@@ -480,105 +481,93 @@ addRoute HttpGet, "/search", proc(vars: var ReqVars) =
                           vars.translate("Purchased")
 
 addRoute HttpGet, "/item", proc(vars: var ReqVars) =
-  vars.addHeader "location", vars.session.prevGet
-  vars.code = Http303
+  vars.addHeader "location", vars.session.prevGetRoutePath
+  vars.respCode = Http303
 
 ## post
 
 addRoute HttpPost, "/signup", proc(vars: var ReqVars) =
-  vars.addHeader "location", vars.session.prevGet
-  vars.code = Http303
+  vars.addHeader "location", vars.session.prevGetRoutePath
+  vars.respCode = Http303
   let email = vars.param("email")
-
   if db.getValue(sql"select exists(select 1 from user where email = ?)", email) == "1":
-    vars.session.notif = "Email <strong>" & email & "</strong> has already been taken"
-    vars.session.notifKind = "is-danger"
+    vars.session.notification = "Email <strong>" & email & "</strong> has already been taken"
+    vars.session.notificationKind = "is-danger"
   else:
     let pass = vars.param("password")
     let salt = genSalt(10)
     let hashed = pass.hash(salt)
     let userId = db.insertID(sql"insert into user(email, passHash, passSalt) values(?, ?, ?)", email, hashed, salt)
     db.exec sql"update session set user = ? where rowid = ?", userId, vars.sessionId
-    vars.session.notif = vars.translate("Signed up successfully")
-    vars.session.notifKind = "is-success"
+    vars.session.notification = vars.translate("Signed up successfully")
+    vars.session.notificationKind = "is-success"
 
 addRoute HttpPost, "/login", proc(vars: var ReqVars) =
-  vars.addHeader "location", vars.session.prevGet
-  vars.code = Http303
+  vars.addHeader "location", vars.session.prevGetRoutePath
+  vars.respCode = Http303
   let email = vars.param("email")
   var userId, passHash, passSalt: string
-  
   db.getRow(sql"select rowid, passHash, passSalt from user where email = ?", email)
     .unpack userId, passHash, passSalt
-  
   if passHash == "" or passSalt == "":
-    vars.session.notif = vars.translate("Invalid email")
-    vars.session.notifKind = "is-danger"
-  
+    vars.session.notification = vars.translate("Invalid email")
+    vars.session.notificationKind = "is-danger"
   else: 
     let pass = vars.param("password")
     let hashed = pass.hash(passSalt)
-    
     if hashed == passHash:
       db.exec sql"update session set user = ? where rowid = ?", userId, vars.sessionId
 
 addRoute HttpPost, "/logout", proc(vars: var ReqVars) =
-  vars.addHeader "location", vars.session.prevGet
-  vars.code = Http303
-
+  vars.addHeader "location", vars.session.prevGetRoutePath
+  vars.respCode = Http303
   if vars.userId != "":
     db.exec sql"update session set user = NULL where rowid = ?", vars.userId
-    vars.session.notif = vars.translate("Logged out from") & ' ' & vars.userEmail
-    vars.session.notifKind = "is-info"
+    vars.session.notification = vars.translate("Logged out from") & ' ' & vars.userEmail
+    vars.session.notificationKind = "is-info"
 
 addRoute HttpPost, "/addOrRemoveCartItem", proc(vars: var ReqVars) =
-  vars.addHeader "location", vars.session.prevGet
-  vars.code = Http303
+  vars.addHeader "location", vars.session.prevGetRoutePath
+  vars.respCode = Http303
   let prodId = vars.param("productId")
-  
   if vars.userId != "":
     var name, inCart: string
-
     db.getRow(sql"""
       select name, exists(select * from cartItem where product = ? and user = ?)
       from productName
       join productNameImpl on productNameImpl.rowid = productName.nameId
       where product = ?
       limit 1""", prodId, vars.userId, prodId).unpack name, inCart
-
     if inCart == "1":
-      vars.session.notif = vars.translate("Removed") & " <strong>" & name & "</strong>"
+      vars.session.notification = vars.translate("Removed") & " <strong>" & name & "</strong>"
       db.exec sql"delete from cartItem where product = ? and user = ?", prodId, vars.userId
     else:
-      vars.session.notif = vars.translate("Added") & " <strong>" & name & "</strong>"
+      vars.session.notification = vars.translate("Added") & " <strong>" & name & "</strong>"
       db.exec sql"insert into cartItem(product, user) values(?, ?)", prodId, vars.userId
 
 addRoute HttpPost, "/buyCartItems", proc(vars: var ReqVars) =
-  vars.addHeader "location", vars.session.prevGet
-  vars.code = Http303
-
+  vars.addHeader "location", vars.session.prevGetRoutePath
+  vars.respCode = Http303
   if vars.userId != "" and db.getValue(sql"select count(*) from cartItem where user = ?", vars.userId) != "0":
     db.exec sql"""
       insert into purchase(user, product)
       select user, product
       from cartItem
       where user = ?""", vars.userId
-
     db.exec sql"delete from cartItem where user = ?", vars.userId
-    vars.session.notif = vars.translate("Purchase completed")
-    vars.session.notifKind = "is-success"
+    vars.session.notification = vars.translate("Purchase completed")
+    vars.session.notificationKind = "is-success"
 
 addRoute HttpPost, "/removeAllCartItems", proc(vars: var ReqVars) =
-  vars.addHeader "location", vars.session.prevGet
-  vars.code = Http303
-
+  vars.addHeader "location", vars.session.prevGetRoutePath
+  vars.respCode = Http303
   if vars.userId != "":
     db.exec sql"delete from cartItem where user = ?", vars.userId
-    vars.session.notif = vars.translate("Removed all cart items")
+    vars.session.notification = vars.translate("Removed all cart items")
 
 addRoute HttpPost, "/changeLang", proc(vars: var ReqVars) =
-  vars.addHeader "location", vars.session.prevGet
-  vars.code = Http303
+  vars.addHeader "location", vars.session.prevGetRoutePath
+  vars.respCode = Http303
   vars.session.langId = vars.param("langId")
 
 ## init
