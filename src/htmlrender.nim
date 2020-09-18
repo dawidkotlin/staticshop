@@ -11,7 +11,7 @@ static:
   for it in ["p", "button", "html", "head", "title", "body", "section", "strong",
              "h1", "h2", "h3", "h4", "h5", "span", "nav", "a", "table", "thead",
              "tr", "th", "td", "tbody", "form", "label", "option", "select", "script",
-             "footer"]:
+             "footer", "figure"]:
     identToTag[it] = it
   
   for it in ["img", "input", "br", "hr", "meta", "link", "checkbox"]:

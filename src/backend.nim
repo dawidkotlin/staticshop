@@ -211,7 +211,7 @@ addRoute HttpGet, "/search", proc(vars: var ReqVars) =
 
   var moviesQuery = """
     select
-      product.rowid, price, premiere, productNameImpl.name, categoryName.name, cartItem.rowid, purchase.rowid
+      product.rowid, price, premiere, productNameImpl.name, categoryName.name, cartItem.rowid, purchase.rowid, product.img
     from
       product
       join productName on productName.product = product.rowid
@@ -417,11 +417,33 @@ addRoute HttpGet, "/search", proc(vars: var ReqVars) =
         # elif true:
         #   tdiv(class="columns"):
         #     for it in db.fastRows(sql(moviesQuery), moviesQueryArgs):
-        #       var rowid, price, premiere, name, categoryName, cartItemId, purchaseId: string
-        #       it.unpack rowid, price, premiere, name, categoryName, cartItemId, purchaseId
+        #       var rowid, price, premiere, name, categoryName, cartItemId, purchaseId, img: string
+        #       it.unpack rowid, price, premiere, name, categoryName, cartItemId, purchaseId, img
         #       price = price.insertSep(' ') & ' ' & vars.translate("PLN")
-        #       tdiv(class="box"):
-
+        #       tdiv(class="column is-one-quarter"):
+        #         tdiv(class="card"):
+        #           tdiv(class="card-image", style="max-height:500px; max-width:500px; height:auto; width:auto;"):
+        #             figure(class="image is-4by3"):
+        #               img(src=img)
+        #           tdiv(class="card-content"):
+        #             h1(class="title"): name
+        #             tdiv(class="content"):
+        #               p categoryName
+        #               p price
+        #               p premiere
+        #               if cartItemId != "": p"In cart"
+        #           if vars.userId != "":
+        #             footer(class="card-footer"):
+        #               if purchaseId != "":
+        #                 a(href="#", class="card-footer-item", disabled="disabled")
+        #               else:
+        #                 form(action="/addOrRemoveCartItem", `method`="post"):
+        #                   input(`type`="hidden", name="productId", value=rowid)
+        #                   button(class="card-footer-item"):
+        #                     if cartItemId != "":
+        #                       vars.translate("Remove")
+        #                     else:
+        #                       vars.translate("Add")
 
         else:
           table(class="table is-fullwidth"):
@@ -437,8 +459,8 @@ addRoute HttpGet, "/search", proc(vars: var ReqVars) =
             
             tbody:
               for it in db.fastRows(sql(moviesQuery), moviesQueryArgs):
-                var rowid, price, premiere, name, categoryName, cartItemId, purchaseId: string
-                it.unpack rowid, price, premiere, name, categoryName, cartItemId, purchaseId
+                var rowid, price, premiere, name, categoryName, cartItemId, purchaseId, img: string
+                it.unpack rowid, price, premiere, name, categoryName, cartItemId, purchaseId, img
                 price = price.insertSep(' ') & ' ' & vars.translate("PLN")
 
                 tr:
